@@ -7,9 +7,10 @@
 ```
 ┌──────────────────┐   WebSocket (Socket.IO)    ┌───────────────────────────┐
 │  Client (React)  │ ◄────────────────────────► │  Server (NestJS)          │
-│  chat window     │   /agent namespace /ws     │  AgentGateway             │
-└──────────────────┘                            │  AgentService + 会话历史   |
+│  ChatWindow      │   /agent namespace /ws     │  AgentGateway             │
+└──────────────────┘                            │  AgentService + 会话历史   │
                                                 │  LangGraph(chat/plan 图)  │
+                                                │  prompts/ 模板目录          │
                                                 │  RAG(向量+BM25 混合检索)   │
                                                 │  LLM(mock/siliconflow/    │
                                                 │       ollama)             │
@@ -25,14 +26,23 @@ npm install
 # 配置环境变量(可选,默认 LLM_PROVIDER=mock 无需任何 key)
 cp server/.env.example server/.env
 
-# 启动 server (http://localhost:3000)
-npm run dev:server
+# 前后端并行启动(server :3000 / client :5173)
+npm run dev
 
-# 启动 client (http://localhost:5173)
-npm run dev:client
-
-# 运行 server 单元测试
+# 或单独启动
+npm run dev -w server
+npm run dev -w client   # vite 代理 /ws 到 server
+ 
+# 运行单元测试:server jest / client vitest
 npm run test -w server
+npm run test -w client
+```
+
+## 生产构建
+
+```bash
+npm run build             # 根脚本:依次构建 client + server
+node server/dist/main.js  # server 同端口托管 client/dist,单源部署(WebSocket /ws 同源)
 ```
 
 ## 环境变量
@@ -75,6 +85,7 @@ server/                       # NestJS 12 + LangGraph 后端
 │   ├── agent.gateway.ts      # WebSocket 网关 (/agent namespace /ws path)
 │   ├── agent.service.ts      # 编排 chat/plan 两张 LangGraph 图
 │   ├── graph/                # chat.graph + plan.graph + nodes
+│   ├── prompts/              # chat.prompt + plan.prompt 模板
 │   ├── rag/                  # BM25 + 向量混合检索,RRF 融合 + rerank
 │   └── llm/                  # Provider 抽象:mock / siliconflow / ollama
 client/                       # React 19 + Vite + Tailwind CSS 4 前端
@@ -100,8 +111,14 @@ docs/                         # api-spec.md / server-spec.md / ui-spec.md
 
 ## 任务进度
 
-- [x] Task #1: API 规范 (docs/api-spec.md)
-- [x] Task #2: Server 实现(问答/行程规划/混合检索/多轮上下文/真实 LLM Provider)
-- [x] Task #3: Client UI 实现(Step 1-4 全部完成 — 连接状态 / 消息渲染 / 规划表单 / ChatWindow 主容器)
-- [ ] 端到端联调与验收 (Issue #24)
-- [ ] 真实 LLM 冒烟 + 环境变量文档 (Issue #27)
+**MS-001 智能问答与行程规划(已完成)**
+
+- [x] Server:LangGraph 双图 + RAG 混合检索 + 会话历史 + SiliconFlow/Ollama Provider
+- [x] Client:ChatWindow 容器、输入表单、消息/行程卡片渲染(Step 1-4 全落地)
+- [x] 集成联调:取消链路 / 错误提示 / 生产构建修复(issue #24)
+
+**待办**
+
+- [ ] #27 真实 LLM 端到端验收与环境变量文档
+- [ ] #28 RAG 语料扩充 → #29 向量检索持久化
+- [ ] #30~#36 二期:行程导出 / 实时数据 / 地图等
