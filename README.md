@@ -55,20 +55,7 @@ npm run build        # 生产构建
 
 **技术栈**:React 19 · Vite 8 · Tailwind CSS 4 · Socket.IO Client
 
-**当前进度** (Task #3 — UI 实现):
-
-| 步骤 | 内容 | 状态 |
-|------|------|------|
-| 1 | 工程准备:依赖替换 + 旧页面清理 + Vite `/ws` 代理 | ✅ 完成 |
-| 2 | 数据层:`lib/types.ts` + `lib/socket.ts` | ✅ 完成 |
-| 3 | Layout 改连接状态指示器 | 🔜 待做 |
-| 4 | 核心组件:ChatWindow / MessageList / MessageItem + App.tsx 路由清理 | 🔜 待做 |
-| 5 | 功能组件:PlanCard / PlanningForm / StreamingText | 🔜 待做 |
-| 6 | 错误处理 + 样式 + 验收 | 🔜 待做 |
-
-> ⚠️ `npm run build` 当前会失败,App.tsx 仍引用 Step 1 已删除的页面;Step 4 完成后恢复。
-
-**变更日志**
-
-- Step 1:移除 `axios` / `react-router` / 旧 Welcome/About/NotFound 页面 / `lib/api.ts`;新增 `socket.io-client`;Vite 补 `/ws` 代理
-- Step 2:新增 `lib/types.ts`(对齐 server `agent.types.ts` + UI 消息类型)、`lib/socket.ts`(`AgentSocket` 单例,namespace `/agent`,path `/ws`)
+**TODO**
+- [ ] Task #1: API 规范 ✅ (docs/api-spec.md)
+- [ ] Task #2: Server 实现
+- [ ] Task #3: UI 实现 (docs/ui-spec.md)
