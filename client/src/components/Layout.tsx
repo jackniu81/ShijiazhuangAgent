@@ -9,7 +9,7 @@ interface Props {
 export default function Layout({ children, footer }: Props) {
   return (
     <div className="min-h-screen flex flex-col bg-slate-50 text-slate-900">
-      <header className="border-b border-slate-200 bg-white">
+      <header className="sticky top-0 z-10 border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-3xl items-center justify-between px-4 py-3">
           <span className="text-lg font-semibold tracking-tight">
             石家庄旅游助手
