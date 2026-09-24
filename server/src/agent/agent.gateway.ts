@@ -30,8 +30,8 @@ export class AgentGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private readonly logger = new Logger(AgentGateway.name);
 
-  /** 已被请求取消的 requestId 集合(requestId 为全局唯一 uuid)。 */
-  private readonly cancelled = new Set<string>();
+  /** 进行中的请求:requestId -> 取消标记。请求结束(完成/出错/取消)即回收。 */
+  private readonly active = new Map<string, { cancelled: boolean }>();
 
   handleConnection(client: Socket): void {
     this.logger.log(`client connected: ${client.id}`);
@@ -41,35 +41,43 @@ export class AgentGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.logger.log(`client disconnected: ${client.id}`);
   }
 
-  private makeEmit(client: Socket): Emit {
-    return (event, data) => client.emit(event, data);
-  }
-
-  private makeIsCancelled(requestId: string) {
-    return () => this.cancelled.has(requestId);
-  }
-
   @SubscribeMessage(AgentEvents.PLAN_CREATE)
   handlePlanCreate(client: Socket, payload: PlanCreatePayload): void {
     if (!payload?.requestId) return;
-    const emit = this.makeEmit(client);
-    // 后台异步执行,不阻塞事件循环;结果通过 emit 回推
-    void this.service.generatePlan(payload, emit, this.makeIsCancelled(payload.requestId));
+    this.run(payload.requestId, client, (emit, isCancelled) =>
+      this.service.generatePlan(payload, emit, isCancelled),
+    );
   }
 
   @SubscribeMessage(AgentEvents.CHAT_ASK)
   handleChatAsk(client: Socket, payload: ChatAskPayload): void {
     if (!payload?.requestId) return;
-    const emit = this.makeEmit(client);
-    void this.service.answerQuestion(payload, emit, this.makeIsCancelled(payload.requestId));
+    this.run(payload.requestId, client, (emit, isCancelled) =>
+      this.service.answerQuestion(payload, emit, isCancelled),
+    );
   }
 
   @SubscribeMessage(AgentEvents.TASK_CANCEL)
   handleTaskCancel(_client: Socket, payload: TaskCancelPayload): void {
-    if (payload?.requestId) {
-      this.cancelled.add(payload.requestId);
+    const entry = payload?.requestId ? this.active.get(payload.requestId) : undefined;
+    if (entry) {
+      entry.cancelled = true;
       this.logger.debug(`request cancelled: ${payload.requestId}`);
     }
+  }
+
+  /** 统一执行:登记 requestId、注入 emit/取消回调、结束后回收,避免集合泄漏。 */
+  private run(
+    requestId: string,
+    client: Socket,
+    invoke: (emit: Emit, isCancelled: () => boolean) => Promise<void>,
+  ): void {
+    const entry = { cancelled: false };
+    this.active.set(requestId, entry);
+    const emit: Emit = (event, data) => client.emit(event, data);
+    const isCancelled = () => entry.cancelled;
+
+    void invoke(emit, isCancelled).finally(() => this.active.delete(requestId));
   }
 
   constructor(private readonly service: AgentService) {}
