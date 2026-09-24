@@ -6,7 +6,7 @@
   "description": "React (Vite) client — 石家庄旅游助手 Chat",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc -p tsconfig.build.json && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
