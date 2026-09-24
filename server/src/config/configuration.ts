@@ -30,6 +30,10 @@ export interface AppConfig {
   };
   chat: {
     historyTurns: number;
+    /** 闲置超过该毫秒数的会话被回收 */
+    sessionTtlMs: number;
+    /** question 最大长度,超出报 INVALID_INPUT */
+    questionMaxLen: number;
   };
 }
 
@@ -67,6 +71,8 @@ export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig 
     },
     chat: {
       historyTurns: int(env.CHAT_HISTORY_TURNS, 6),
+      sessionTtlMs: int(env.CHAT_SESSION_TTL_MS, 30 * 60_000),
+      questionMaxLen: int(env.CHAT_QUESTION_MAX, 500),
     },
   };
 }

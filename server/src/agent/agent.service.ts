@@ -9,6 +9,7 @@ import { CancelledSignal } from './graph/graph.types';
 import { GraphDeps } from './graph/graph.types';
 import { runChatGraph } from './graph/chat.graph';
 import { runPlanGraph } from './graph/plan.graph';
+import { SESSION_STORE, SessionStore } from './chat/session.store';
 import { LLM_PROVIDER } from './llm/llm.factory';
 import { LLMProvider } from './llm/llm.types';
 import { RagService } from './rag/rag.service';
@@ -19,6 +20,14 @@ export type Emit = (event: string, data: unknown) => void;
 
 /** 返回 true 表示该请求已被 client 取消,应尽快停止。 */
 export type IsCancelled = () => boolean;
+
+/** 单请求超时(兜底)信号,与普通异常区分。 */
+class TimeoutSignal extends Error {
+  constructor() {
+    super('timeout');
+    this.name = 'TimeoutSignal';
+  }
+}
 
 /**
  * 编排入口:组装 LangGraph 运行依赖,驱动行程/问答图,并把执行异常收敛为
@@ -31,6 +40,7 @@ export class AgentService {
   constructor(
     @Inject(LLM_PROVIDER) private readonly llm: LLMProvider,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
+    @Inject(SESSION_STORE) private readonly sessions: SessionStore,
     private readonly rag: RagService,
   ) {}
 
@@ -61,18 +71,45 @@ export class AgentService {
   ): Promise<void> {
     const { requestId, sessionId, question } = payload;
 
-    if (!question || !question.trim()) {
+    const trimmed = question?.trim();
+    if (!trimmed) {
       emitError(emit, requestId, 'INVALID_INPUT', '问题不能为空。');
+      return;
+    }
+    if (trimmed.length > this.config.chat.questionMaxLen) {
+      emitError(
+        emit,
+        requestId,
+        'INVALID_INPUT',
+        `问题过长(最多 ${this.config.chat.questionMaxLen} 字),请精简后再问。`,
+      );
       return;
     }
 
     const deps = this.buildDeps(requestId, emit, isCancelled);
+    const history = this.sessions.getHistory(sessionId);
     try {
-      // history 暂为空;多轮上下文在后续迭代接入
-      await runChatGraph(deps, { question, sessionId, history: [] });
+      const answer = await this.withTimeout(
+        runChatGraph(deps, { question: trimmed, sessionId, history }),
+      );
+      if (answer) this.sessions.appendTurn(sessionId, trimmed, answer);
     } catch (err) {
+      if (err instanceof TimeoutSignal) {
+        this.logger.warn(`chat request timeout: ${requestId}`);
+        emitError(emit, requestId, 'LLM_ERROR', '响应超时,请稍后重试。');
+        return;
+      }
       this.handleError(err, emit, requestId, '回答问题时出现错误,请稍后重试。');
     }
+  }
+
+  /** 单请求超时兑底(spec §8 LLM_TIMEOUT_MS)。 */
+  private withTimeout<T>(task: Promise<T | undefined>): Promise<T | undefined> {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<never>((_, reject) => {
+      timer = setTimeout(() => reject(new TimeoutSignal()), this.config.llm.timeoutMs);
+    });
+    return Promise.race([task, timeout]).finally(() => clearTimeout(timer));
   }
 
   private buildDeps(requestId: string, emit: Emit, isCancelled: IsCancelled): GraphDeps {
