@@ -128,8 +128,13 @@ export const nodes = {
         },
         { signal: deps.signal },
       );
-      // 取消/超时会 abort 信号:此时静默终止,错误已由 withTimeout/guardCancel 上报
-      if (deps.signal?.aborted) throw new CancelledSignal();
+      // 取消/超时会 abort 信号,分两种收尾:
+      //  - 用户取消:经 guardCancel 上报 app:error(CANCELLED),让客户端立即复位;
+      //  - 请求内超时:withTimeout 已以 LLM_ERROR 上报,此处静默抛断,不重复发事件。
+      if (deps.signal?.aborted) {
+        guardCancel(deps);
+        throw new CancelledSignal();
+      }
       // RAG 降级时在完整 answer 中注明(流式 token 已过,前端以 chat:done.answer 为准)
       if (!state.docs.length && deps.ragDegraded) {
         answer += '\n(注:本地资料检索暂不可用,以上回答基于模型常识)';
