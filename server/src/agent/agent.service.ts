@@ -10,6 +10,7 @@ import { GraphDeps } from './graph/graph.types';
 import { runChatGraph } from './graph/chat.graph';
 import { runPlanGraph } from './graph/plan.graph';
 import { SESSION_STORE, SessionStore } from './chat/session.store';
+import { LLMError } from './llm/http';
 import { LLM_PROVIDER } from './llm/llm.factory';
 import { LLMProvider } from './llm/llm.types';
 import { RagService } from './rag/rag.service';
@@ -20,14 +21,6 @@ export type Emit = (event: string, data: unknown) => void;
 
 /** 返回 true 表示该请求已被 client 取消,应尽快停止。 */
 export type IsCancelled = () => boolean;
-
-/** 单请求超时(兜底)信号,与普通异常区分。 */
-class TimeoutSignal extends Error {
-  constructor() {
-    super('timeout');
-    this.name = 'TimeoutSignal';
-  }
-}
 
 /**
  * 编排入口:组装 LangGraph 运行依赖,驱动行程/问答图,并把执行异常收敛为
@@ -48,6 +41,7 @@ export class AgentService {
     payload: PlanCreatePayload,
     emit: Emit,
     isCancelled: IsCancelled,
+    externalSignal?: AbortSignal,
   ): Promise<void> {
     const { requestId, input } = payload;
 
@@ -56,11 +50,12 @@ export class AgentService {
       return;
     }
 
-    const deps = this.buildDeps(requestId, emit, isCancelled);
+    const ctrl = new AbortController();
+    const deps = this.buildDeps(requestId, emit, isCancelled, ctrl, externalSignal);
     try {
-      await runPlanGraph(deps, input);
+      await this.withTimeout(runPlanGraph(deps, input), ctrl);
     } catch (err) {
-      this.handleError(err, emit, requestId, '生成行程时出现错误,请稍后重试。');
+      this.handleError(err, emit, requestId, isCancelled, '生成行程时出现错误,请稍后重试。');
     }
   }
 
@@ -68,6 +63,7 @@ export class AgentService {
     payload: ChatAskPayload,
     emit: Emit,
     isCancelled: IsCancelled,
+    externalSignal?: AbortSignal,
   ): Promise<void> {
     const { requestId, sessionId, question } = payload;
 
@@ -86,33 +82,46 @@ export class AgentService {
       return;
     }
 
-    const deps = this.buildDeps(requestId, emit, isCancelled);
+    const ctrl = new AbortController();
+    const deps = this.buildDeps(requestId, emit, isCancelled, ctrl, externalSignal);
     const history = this.sessions.getHistory(sessionId);
     try {
       const answer = await this.withTimeout(
         runChatGraph(deps, { question: trimmed, sessionId, history }),
+        ctrl,
       );
       if (answer) this.sessions.appendTurn(sessionId, trimmed, answer);
     } catch (err) {
-      if (err instanceof TimeoutSignal) {
-        this.logger.warn(`chat request timeout: ${requestId}`);
-        emitError(emit, requestId, 'LLM_ERROR', '响应超时,请稍后重试。');
-        return;
-      }
-      this.handleError(err, emit, requestId, '回答问题时出现错误,请稍后重试。');
+      this.handleError(err, emit, requestId, isCancelled, '回答问题时出现错误,请稍后重试。');
     }
   }
 
-  /** 单请求超时兑底(spec §8 LLM_TIMEOUT_MS)。 */
-  private withTimeout<T>(task: Promise<T | undefined>): Promise<T | undefined> {
+  /**
+   * 单请求超时兜底(spec §8 LLM_TIMEOUT_MS):
+   * 超时后 abort 内部信号,中断在途的 provider HTTP 流,并抛可读 LLMError。
+   */
+  private withTimeout<T>(task: Promise<T>, ctrl: AbortController): Promise<T> {
     let timer: NodeJS.Timeout | undefined;
     const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new TimeoutSignal()), this.config.llm.timeoutMs);
+      timer = setTimeout(() => {
+        ctrl.abort();
+        reject(new LLMError('响应超时,请稍后重试。', false));
+      }, this.config.llm.timeoutMs);
     });
     return Promise.race([task, timeout]).finally(() => clearTimeout(timer));
   }
 
-  private buildDeps(requestId: string, emit: Emit, isCancelled: IsCancelled): GraphDeps {
+  private buildDeps(
+    requestId: string,
+    emit: Emit,
+    isCancelled: IsCancelled,
+    ctrl: AbortController,
+    externalSignal?: AbortSignal,
+  ): GraphDeps {
+    // 联动"请求内超时 abort"与"gateway 取消 abort",传给 provider 中断在途流
+    const signal = externalSignal
+      ? AbortSignal.any([ctrl.signal, externalSignal])
+      : ctrl.signal;
     return {
       llm: this.llm,
       retrieve: (query, k) => this.rag.retrieve(query, k ?? this.config.rag.topK),
@@ -120,11 +129,25 @@ export class AgentService {
       emit,
       requestId,
       isCancelled,
+      signal,
+      ragDegraded: this.rag.isDegraded,
     };
   }
 
-  private handleError(err: unknown, emit: Emit, requestId: string, fallback: string): void {
-    if (err instanceof CancelledSignal) return; // 取消已单独上报
+  private handleError(
+    err: unknown,
+    emit: Emit,
+    requestId: string,
+    isCancelled: IsCancelled,
+    fallback: string,
+  ): void {
+    if (err instanceof CancelledSignal) return; // 节点边界取消,已单独上报
+    if (isCancelled()) return; // provider 因取消 abort 的连带异常,静默
+    if (err instanceof LLMError) {
+      this.logger.warn(`llm error: ${err.message}`);
+      emitError(emit, requestId, 'LLM_ERROR', err.message);
+      return;
+    }
     this.logger.error(err instanceof Error ? err.stack : String(err));
     emitError(emit, requestId, 'INTERNAL', fallback);
   }

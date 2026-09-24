@@ -10,7 +10,7 @@ export interface Msg {
 export interface ChatOptions {
   temperature?: number;
   maxTokens?: number;
-  /** 预留:接入方用于中断流式生成 */
+  /** 取消/超时信号:真实 provider 用于中断在途 HTTP 流;mock 用于提前停止回放 */
   signal?: AbortSignal;
 }
 
