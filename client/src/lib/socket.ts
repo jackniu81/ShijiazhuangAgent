@@ -6,20 +6,14 @@ import { io, Socket } from 'socket.io-client';
 import {
   AgentEvents,
   ChatAskPayload,
-  ChatDoneEvent,
-  ChatTokenEvent,
   PlanCreatePayload,
-  PlanProgressEvent,
-  PlanResultEvent,
   TaskCancelPayload,
-  AppErrorEvent,
 } from './types';
 
 type Listener = (data: any) => void;
 
 const NAMESPACE = '/agent';
-// 注意:path 是 socket.io 底层传输的 HTTP 路径,不是 namespace
-// Vite 代理 /ws → localhost:3000/ws,server 端 @WebSocketGateway({ path: '/ws' })
+// path 是 socket.io 底层 HTTP 路径,Vite 代理 /ws → localhost:3000/ws
 const SOCKET_PATH = '/ws';
 
 class AgentSocket {
@@ -81,6 +75,10 @@ class AgentSocket {
     this.on('__state__', cb as Listener);
   }
 
+  offConnectionChange(cb: (connected: boolean) => void) {
+    this.off('__state__', cb as Listener);
+  }
+
   // ---------- Client → Server ----------
   createPlan(payload: PlanCreatePayload) {
     this.socket?.emit(AgentEvents.PLAN_CREATE, payload);
@@ -106,12 +104,3 @@ class AgentSocket {
 }
 
 export const agentSocket = new AgentSocket();
-
-// 便捷类型导出,组件按需引用
-export type {
-  PlanProgressEvent,
-  PlanResultEvent,
-  ChatTokenEvent,
-  ChatDoneEvent,
-  AppErrorEvent,
-};
