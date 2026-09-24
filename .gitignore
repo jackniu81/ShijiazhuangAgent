@@ -1,0 +1,13 @@
+AGENTS.md
+require.md
+node_modules/
+dist/
+build/
+*.log
+npm-debug.log*
+.env
+.env.local
+.DS_Store
+.vscode/
+.idea/
+coverage/

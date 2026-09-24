@@ -1,0 +1,19 @@
+{
+  "name": "node-react",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Full-stack app: NestJS API + React (Vite) client, single-service deploy",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,green \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w client && npm run build -w server",
+    "start": "node server/dist/main.js",
+    "start:prod": "npm run build && npm run start"
+  },
+  "devDependencies": {
+    "concurrently": "^10.0.5"
+  }
+}
