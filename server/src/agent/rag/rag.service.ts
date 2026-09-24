@@ -30,10 +30,10 @@ export class RagService implements OnModuleInit {
 
   /** 重建索引(启动时或知识库变更后调用);异常不阻断启动,降级为无检索。 */
   async reindex(): Promise<void> {
-    const { dataDir, chunkSize, chunkOverlap } = this.config.rag;
+    const { dataDir, chunkSize, chunkOverlap, hybrid } = this.config.rag;
     const embedder = (texts: string[]) => this.llm.embed(texts);
     try {
-      this.store = await buildIndexFromDir(dataDir, embedder, { chunkSize, chunkOverlap });
+      this.store = await buildIndexFromDir(dataDir, embedder, { chunkSize, chunkOverlap, hybrid });
       this.degraded = false;
       this.logger.log(`RAG 索引就绪:${this.store.size} 个切块(来自 ${dataDir})`);
     } catch (err) {

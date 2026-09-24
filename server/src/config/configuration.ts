@@ -27,6 +27,8 @@ export interface AppConfig {
     topK: number;
     chunkSize: number;
     chunkOverlap: number;
+    /** BM25 + 向量混合检索(RRF 融合),issue #9,默认开 */
+    hybrid: boolean;
   };
   chat: {
     historyTurns: number;
@@ -36,6 +38,9 @@ export interface AppConfig {
     questionMaxLen: number;
   };
 }
+
+const bool = (v: string | undefined, def: boolean): boolean =>
+  v === undefined || v === '' ? def : v !== '0' && v.toLowerCase() !== 'false';
 
 const int = (v: string | undefined, def: number): number => {
   const n = Number(v);
@@ -68,6 +73,7 @@ export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig 
       topK: int(env.RAG_TOPK, 5),
       chunkSize: int(env.RAG_CHUNK_SIZE, 500),
       chunkOverlap: int(env.RAG_CHUNK_OVERLAP, 50),
+      hybrid: bool(env.RAG_HYBRID, true),
     },
     chat: {
       historyTurns: int(env.CHAT_HISTORY_TURNS, 6),

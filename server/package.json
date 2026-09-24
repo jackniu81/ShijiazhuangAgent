@@ -7,7 +7,9 @@
     "dev": "nest start --watch",
     "build": "nest build",
     "start": "node dist/main.js",
-    "start:prod": "node dist/main.js"
+    "start:prod": "node dist/main.js",
+    "test": "jest",
+    "test:cov": "jest --coverage"
   },
   "dependencies": {
     "@langchain/langgraph": "^1.4.17",
@@ -25,7 +27,19 @@
   "devDependencies": {
     "@nestjs/cli": "^12.0.3",
     "@types/express": "^5.0.0",
+    "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
+    "jest": "^30.5.2",
+    "ts-jest": "^29.4.13",
     "typescript": "^5.7.2"
+  },
+  "jest": {
+    "moduleFileExtensions": ["js", "json", "ts"],
+    "rootDir": "src",
+    "testRegex": ".*\\.spec\\.ts$",
+    "transform": {
+      "^.+\\.(t|j)s$": ["ts-jest", { "tsconfig": "tsconfig.json" }]
+    },
+    "testEnvironment": "node"
   }
 }
