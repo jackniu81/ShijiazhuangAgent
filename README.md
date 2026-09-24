@@ -5,12 +5,12 @@
 ## 架构
 
 ```
-┌──────────────────┐   WebSocket (Socket.IO)   ┌───────────────────────────┐
+┌──────────────────┐   WebSocket (Socket.IO)    ┌───────────────────────────┐
 │  Client (React)  │ ◄────────────────────────► │  Server (NestJS)          │
 │  chat window     │   /agent namespace /ws     │  AgentGateway             │
-└──────────────────┘                            │  AgentService + 会话历史   │
+└──────────────────┘                            │  AgentService + 会话历史   |
                                                 │  LangGraph(chat/plan 图)  │
-                                                │  RAG(向量+BM25 混合检索)  │
+                                                │  RAG(向量+BM25 混合检索)   │
                                                 │  LLM(mock/siliconflow/    │
                                                 │       ollama)             │
                                                 └───────────────────────────┘
