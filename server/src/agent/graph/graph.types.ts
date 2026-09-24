@@ -15,6 +15,10 @@ export interface GraphDeps {
   emit: Emit;
   requestId: string;
   isCancelled: IsCancelled;
+  /** 取消/超时联动信号,传给 provider 中断在途 HTTP 流(issue #7/#8) */
+  signal?: AbortSignal;
+  /** RAG 索引降级(构建失败)时为 true,回答中会注明未检索到本地资料 */
+  ragDegraded: boolean;
 }
 
 /** 行程图状态值。 */

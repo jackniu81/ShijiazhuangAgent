@@ -104,21 +104,31 @@ export const nodes = {
     };
   },
 
-  /** 问答:流式输出,token 直连 chat:token,结束发 chat:done。 */
+  /** 问答:流式输出,token 直连 chat:token,结束发 chat:done。支持取消/超时信号中断。 */
   generate(deps: GraphDeps) {
     return async (state: ChatState) => {
       guardCancel(deps);
       const msgs = buildChatMessages(state, deps.config.chat.historyTurns);
       let answer = '';
       const sources = uniqueSources(state.docs);
-      answer = await deps.llm.stream(msgs, (token) => {
-        if (deps.isCancelled()) return; // stream 内部会自然收敛
-        deps.emit(AgentEvents.CHAT_TOKEN, {
-          requestId: deps.requestId,
-          sessionId: state.sessionId,
-          token,
-        });
-      });
+      answer = await deps.llm.stream(
+        msgs,
+        (token) => {
+          if (deps.isCancelled()) return; // stream 内部会自然收敛
+          deps.emit(AgentEvents.CHAT_TOKEN, {
+            requestId: deps.requestId,
+            sessionId: state.sessionId,
+            token,
+          });
+        },
+        { signal: deps.signal },
+      );
+      // 取消/超时会 abort 信号:此时静默终止,错误已由 withTimeout/guardCancel 上报
+      if (deps.signal?.aborted) throw new CancelledSignal();
+      // RAG 降级时在完整 answer 中注明(流式 token 已过,前端以 chat:done.answer 为准)
+      if (!state.docs.length && deps.ragDegraded) {
+        answer += '\n(注:本地资料检索暂不可用,以上回答基于模型常识)';
+      }
       guardCancel(deps);
       deps.emit(AgentEvents.CHAT_DONE, {
         requestId: deps.requestId,

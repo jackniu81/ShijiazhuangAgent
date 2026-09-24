@@ -26,10 +26,13 @@ export class MockProvider implements LLMProvider {
   async stream(
     messages: Msg[],
     onToken: (token: string) => void,
-    _options?: ChatOptions,
+    options?: ChatOptions,
   ): Promise<string> {
     const answer = this.composeAnswer(messages);
+    let emitted = '';
     for (const token of tokenize(answer)) {
+      if (options?.signal?.aborted) return emitted; // 取消/超时中断回放
+      emitted += token;
       onToken(token);
       await sleep(this.streamDelayMs);
     }
