@@ -8,6 +8,8 @@ import { InMemoryVectorStore } from './store';
 export interface IndexOptions {
   chunkSize?: number;
   chunkOverlap?: number;
+  /** 混合检索开关(向量 + BM25 RRF),默认启用 */
+  hybrid?: boolean;
 }
 
 /**
@@ -19,7 +21,7 @@ export async function buildIndexFromDir(
   embedder: Embedder,
   options: IndexOptions = {},
 ): Promise<InMemoryVectorStore> {
-  const store = new InMemoryVectorStore();
+  const store = new InMemoryVectorStore({ hybrid: options.hybrid });
   const files = listMarkdownFiles(dataDir);
   if (!files.length) return store;
 
