@@ -8,9 +8,14 @@ import {
   PlanResultEvent,
   TravelPlan,
 } from '../agent.types';
-import { Msg } from '../llm/llm.types';
+import { buildChatMessages } from '../prompts/chat.prompt';
+import { buildPlanMessages } from '../prompts/plan.prompt';
+import { uniqueSources, uniqueTitles } from '../prompts/util';
 import { RetrievedDoc } from '../rag/rag.types';
 import { CancelledSignal, ChatState, GraphDeps, PlanState } from './graph.types';
+
+// prompt 模板已抽至 agent/prompts/(issue #10),此处 re-export 保持对外 API 不变
+export { buildChatMessages, buildPlanMessages };
 
 // ────────────────────────────────────────────────────────────
 // 通用:带进度上报 + 取消守卫的节点包装
@@ -144,7 +149,7 @@ export const nodes = {
 // 保留导出以便未来扩展(当前实现以闭包工厂为主)
 
 // ────────────────────────────────────────────────────────────
-// 纯函数:查询、prompt、组装、解析、规整
+// 纯函数:查询、组装、解析、规整(prompt 构建见 agent/prompts/)
 // ────────────────────────────────────────────────────────────
 function planQuery(input: PlanState['input']): string {
   const parts = [
@@ -187,39 +192,6 @@ export function assemblePlanFromDocs(input: PlanState['input'], docs: RetrievedD
   };
 }
 
-export function buildPlanMessages(input: PlanState['input'], docs: RetrievedDoc[]): Msg[] {
-  const context = docs.map((d) => `- ${d.meta.title}:${d.text.slice(0, 120)}`).join('\n');
-  return [
-    {
-      role: 'system',
-      content:
-        '你是石家庄旅游规划助手。只输出符合给定 JSON schema 的行程,不要多余文字。' +
-        'schema: {"title":string,"days":[{"day":int,"items":[{"time":string,"title":string,"place":string,"description":string}]}],"summary":string,"tips":[string]}',
-    },
-    {
-      role: 'user',
-      content:
-        `需求:天数=${input.days},人数=${input.travelers ?? 1},预算=${input.budget ?? 'comfort'},` +
-        `兴趣=${(input.interests ?? []).join('/')||'不限'},偏好=${input.preferences ?? '无'}\n` +
-        `参考本地资料:\n${context || '(无)'}`,
-    },
-  ];
-}
-
-export function buildChatMessages(state: ChatState, historyTurns: number): Msg[] {
-  const contextTitles = uniqueTitles(state.docs).slice(0, 4);
-  const user =
-    `CONTEXT:${contextTitles.join('、')}\n` +
-    `参考资料:\n${state.docs.map((d) => `## ${d.meta.title}\n${d.text}`).join('\n\n').slice(0, 2000)}\n` +
-    `Q:${state.question}`;
-  const history = state.history.slice(-historyTurns * 2);
-  return [
-    { role: 'system', content: '你是石家庄旅游助手,基于提供的本地资料用中文自然回答,简洁友好。' },
-    ...history,
-    { role: 'user', content: user },
-  ];
-}
-
 export function parsePlanJson(raw: string, expectedDays: number): TravelPlan {
   const json = extractJson(raw);
   const parsed = JSON.parse(json) as TravelPlan;
@@ -259,14 +231,6 @@ export function refinePlan(plan: TravelPlan, expectedDays: number): TravelPlan {
     summary: plan.summary,
     tips: plan.tips,
   };
-}
-
-function uniqueTitles(docs: RetrievedDoc[]): string[] {
-  return [...new Set(docs.map((d) => d.meta.title).filter(Boolean))];
-}
-
-function uniqueSources(docs: RetrievedDoc[]): string[] {
-  return [...new Set(docs.map((d) => d.source).filter(Boolean))];
 }
 
 function clampDays(n: number): number {
