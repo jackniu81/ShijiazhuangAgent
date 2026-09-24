@@ -27,10 +27,10 @@ cp server/.env.example server/.env
 
 # 启动 server (http://localhost:3000)
 npm run dev:server
-
+  
 # 启动 client (http://localhost:5173)
 npm run dev:client
-
+ 
 # 运行 server 单元测试
 npm run test -w server
 ```
