@@ -1,4 +1,5 @@
 import { NestFactory } from '@nestjs/core';
+import { IoAdapter } from '@nestjs/platform-socket.io';
 import { existsSync } from 'fs';
 import { join } from 'path';
 import express from 'express';
@@ -10,6 +11,9 @@ const indexHtml = join(clientDist, 'index.html');
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  // Attach the Socket.IO adapter so AgentGateway shares the same HTTP server/port
+  app.useWebSocketAdapter(new IoAdapter(app));
 
   // All API endpoints live under /api
   app.setGlobalPrefix('api');
