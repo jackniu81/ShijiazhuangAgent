@@ -2,6 +2,7 @@ import {
   AgentEvents,
   AppErrorEvent,
   PlanDay,
+  PlanDayEvent,
   PlanItem,
   PlanNode,
   PlanProgressEvent,
@@ -59,6 +60,27 @@ function emitError(deps: GraphDeps, code: AppErrorEvent['code'], message: string
   deps.emit(AgentEvents.APP_ERROR, { requestId: deps.requestId, code, message } as AppErrorEvent);
 }
 
+/** 逐天流式 emit plan:day,每 300ms 一档让前端逐步显示。 */
+async function emitPlanDays(deps: GraphDeps, plan: TravelPlan): Promise<void> {
+  const totalDays = plan.days.length;
+  for (let i = 0; i < totalDays; i++) {
+    guardCancel(deps);
+    const evt: PlanDayEvent = {
+      requestId: deps.requestId,
+      title: plan.title,
+      day: plan.days[i],
+      totalDays,
+      summary: i === 0 ? plan.summary : undefined,
+    };
+    deps.emit(AgentEvents.PLAN_DAY, evt);
+    if (i < totalDays - 1) await sleep(300);
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms));
+}
+
 // ────────────────────────────────────────────────────────────
 // 节点工厂(闭包捕获 deps,节点签名仍兼容 LangGraph)
 // ────────────────────────────────────────────────────────────
@@ -81,11 +103,16 @@ export const nodes = {
   plan(deps: GraphDeps) {
     return async (state: PlanState) => {
       const plan = await tracked(deps, 'plan', '正在规划行程…', async () => {
+        let rawPlan: TravelPlan;
         if (deps.llm.name === 'mock') {
-          return assemblePlanFromDocs(state.input, state.docs);
+          rawPlan = assemblePlanFromDocs(state.input, state.docs);
+        } else {
+          const raw = await deps.llm.chat(buildPlanMessages(state.input, state.docs));
+          rawPlan = parsePlanJson(raw, state.input.days);
         }
-        const raw = await deps.llm.chat(buildPlanMessages(state.input, state.docs));
-        return parsePlanJson(raw, state.input.days);
+        // 逐天流式 emit:plan:day 让前端提前看到部分行程
+        await emitPlanDays(deps, rawPlan);
+        return rawPlan;
       });
       return { plan };
     };

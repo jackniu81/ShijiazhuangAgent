@@ -48,7 +48,7 @@ export default function MessageItem({ message, streaming }: Props) {
         </div>
         <div className="max-w-[85%]">
           {message.kind === 'plan' ? (
-            <PlanCard plan={message.plan} />
+            <PlanCard plan={message.plan} streaming={message.streaming} />
           ) : (
             <div className="rounded-2xl rounded-tl-sm bg-white px-4 py-2.5 text-sm text-slate-800 shadow-sm ring-1 ring-slate-200">
               {streaming ? (

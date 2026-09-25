@@ -8,8 +8,10 @@ import {
   type ChatMessage,
   type ChatTokenEvent,
   type PlanCreatePayload,
+  type PlanDayEvent,
   type PlanProgressEvent,
   type PlanResultEvent,
+  type TravelPlan,
 } from '../lib/types';
 import Layout from './Layout';
 import MessageList from './MessageList';
@@ -51,6 +53,7 @@ interface ChatState {
   isStreaming: boolean;
   pendingRequestId?: string;
   streamingMessageId?: string;
+  streamingPlanId?: string;
   showPlanningForm: boolean;
   toast?: { code: string; message: string; recoverable: boolean };
 }
@@ -60,6 +63,7 @@ type ChatAction =
   | { type: 'DISCONNECT' }
   | { type: 'SEND_PLAN'; requestId: string; userMsg: string }
   | { type: 'PLAN_PROGRESS'; data: PlanProgressEvent }
+  | { type: 'PLAN_DAY'; data: PlanDayEvent }
   | { type: 'PLAN_RESULT'; data: PlanResultEvent }
   | { type: 'SEND_CHAT'; requestId: string; question: string }
   | { type: 'CHAT_TOKEN'; data: ChatTokenEvent }
@@ -114,6 +118,48 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
 
+    case 'PLAN_DAY': {
+      if (state.pendingRequestId && action.data.requestId !== state.pendingRequestId) return state;
+      const ev = action.data;
+
+      if (!state.streamingPlanId) {
+        // 首次:创建带占位的 streaming plan message
+        const placeholderDays = Array.from({ length: ev.totalDays }, (_, i) => ({
+          day: i + 1,
+          items: [] as TravelPlan['days'][number]['items'],
+        }));
+        const planMsg: ChatMessage = {
+          id: makeId(),
+          role: 'assistant',
+          kind: 'plan',
+          plan: {
+            title: ev.title ?? '行程规划中',
+            days: placeholderDays,
+            summary: ev.summary,
+          },
+          streaming: true,
+          timestamp: now,
+        };
+        return {
+          ...state,
+          messages: [...state.messages, planMsg],
+          streamingPlanId: planMsg.id,
+        };
+      }
+
+      // 后续:追加到现有 plan message,替换对应 day
+      return {
+        ...state,
+        messages: state.messages.map((m) => {
+          if (m.id !== state.streamingPlanId || m.role !== 'assistant' || m.kind !== 'plan') return m;
+          const updatedDays = m.plan.days.map((d) =>
+            d.day === ev.day.day ? ev.day : d
+          );
+          return { ...m, plan: { ...m.plan, days: updatedDays } };
+        }),
+      };
+    }
+
     case 'PLAN_RESULT': {
       if (state.pendingRequestId && action.data.requestId !== state.pendingRequestId) return state;
       const planMsg: ChatMessage = {
@@ -123,6 +169,21 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         plan: action.data.plan,
         timestamp: now,
       };
+
+      // 如果之前有 streaming plan message,替换它;否则直接追加
+      if (state.streamingPlanId) {
+        return {
+          ...state,
+          messages: state.messages.map((m) =>
+            m.id === state.streamingPlanId ? planMsg : m
+          ),
+          pendingRequestId: undefined,
+          streamingPlanId: undefined,
+          isStreaming: false,
+          toast: undefined,
+        };
+      }
+
       return {
         ...state,
         messages: [...state.messages, planMsg],
@@ -199,6 +260,23 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
           ),
           pendingRequestId: undefined,
           streamingMessageId: undefined,
+          streamingPlanId: undefined,
+          isStreaming: false,
+          toast: undefined,
+        };
+      }
+
+      // plan 流式构建中取消:标记已有的天数
+      if (action.data.code === 'CANCELLED' && state.streamingPlanId) {
+        return {
+          ...state,
+          messages: state.messages.map((m) =>
+            m.id === state.streamingPlanId && m.role === 'assistant' && m.kind === 'plan'
+              ? { ...m, streaming: false }
+              : m
+          ),
+          pendingRequestId: undefined,
+          streamingPlanId: undefined,
           isStreaming: false,
           toast: undefined,
         };
@@ -210,6 +288,7 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
           ...state,
           pendingRequestId: undefined,
           streamingMessageId: undefined,
+          streamingPlanId: undefined,
           isStreaming: false,
           toast: {
             code: 'INVALID_INPUT',
@@ -234,6 +313,7 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         ],
         pendingRequestId: undefined,
         streamingMessageId: undefined,
+        streamingPlanId: undefined,
         isStreaming: false,
         toast: {
           code: action.data.code,
@@ -258,6 +338,7 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         ],
         pendingRequestId: undefined,
         streamingMessageId: undefined,
+        streamingPlanId: undefined,
         isStreaming: false,
         toast: { code: 'TIMEOUT', message: '响应超时,请重试', recoverable: true },
       };
@@ -305,6 +386,7 @@ export default function ChatWindow() {
     isStreaming: false,
     pendingRequestId: undefined,
     streamingMessageId: undefined,
+    streamingPlanId: undefined,
     showPlanningForm: false,
     toast: undefined,
   });
@@ -319,6 +401,10 @@ export default function ChatWindow() {
     const onPlanProgress = (data: PlanProgressEvent) => {
       resetTimeout();
       dispatch({ type: 'PLAN_PROGRESS', data });
+    };
+    const onPlanDay = (data: PlanDayEvent) => {
+      resetTimeout();
+      dispatch({ type: 'PLAN_DAY', data });
     };
     const onPlanResult = (data: PlanResultEvent) => {
       clearTimeoutRef();
@@ -344,6 +430,7 @@ export default function ChatWindow() {
 
     agentSocket.onConnectionChange(onStateChange);
     agentSocket.on(AgentEvents.PLAN_PROGRESS, onPlanProgress);
+    agentSocket.on(AgentEvents.PLAN_DAY, onPlanDay);
     agentSocket.on(AgentEvents.PLAN_RESULT, onPlanResult);
     agentSocket.on(AgentEvents.CHAT_TOKEN, onChatToken);
     agentSocket.on(AgentEvents.CHAT_DONE, onChatDone);
@@ -354,6 +441,7 @@ export default function ChatWindow() {
     return () => {
       agentSocket.offConnectionChange(onStateChange);
       agentSocket.off(AgentEvents.PLAN_PROGRESS, onPlanProgress);
+      agentSocket.off(AgentEvents.PLAN_DAY, onPlanDay);
       agentSocket.off(AgentEvents.PLAN_RESULT, onPlanResult);
       agentSocket.off(AgentEvents.CHAT_TOKEN, onChatToken);
       agentSocket.off(AgentEvents.CHAT_DONE, onChatDone);
