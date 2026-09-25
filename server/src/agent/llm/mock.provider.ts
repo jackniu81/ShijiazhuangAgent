@@ -16,7 +16,7 @@ export class MockProvider implements LLMProvider {
 
   constructor(options: { dim?: number; streamDelayMs?: number } = {}) {
     this.dim = options.dim ?? 256;
-    this.streamDelayMs = options.streamDelayMs ?? 40;
+    this.streamDelayMs = options.streamDelayMs ?? 150;
   }
 
   async chat(messages: Msg[], _options?: ChatOptions): Promise<string> {
