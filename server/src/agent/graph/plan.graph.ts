@@ -1,5 +1,5 @@
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
-import type { PlanCreatePayload, TravelPlan } from '../agent.types';
+import type { PlanCreatePayload, TravelPlan } from '@shijiazhuang-agent/shared';
 import type { RetrievedDoc } from '../rag/rag.types';
 import { CancelledSignal, GraphDeps, PlanState } from './graph.types';
 import { nodes } from './nodes';

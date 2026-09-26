@@ -13,7 +13,7 @@ import {
   ChatAskPayload,
   PlanCreatePayload,
   TaskCancelPayload,
-} from './agent.types';
+} from '@shijiazhuang-agent/shared';
 
 /**
  * WebSocket 网关 —— namespace `/agent`,path `/ws`(与 HTTP 同源共享端口)。

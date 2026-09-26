@@ -4,7 +4,7 @@ import {
   AppErrorEvent,
   ChatAskPayload,
   PlanCreatePayload,
-} from './agent.types';
+} from '@shijiazhuang-agent/shared';
 import { CancelledSignal } from './graph/graph.types';
 import { GraphDeps } from './graph/graph.types';
 import { runChatGraph } from './graph/chat.graph';

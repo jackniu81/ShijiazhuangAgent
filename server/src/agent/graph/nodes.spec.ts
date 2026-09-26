@@ -1,4 +1,4 @@
-import { AgentEvents, AppErrorEvent } from '../agent.types';
+import { AgentEvents, AppErrorEvent } from '@shijiazhuang-agent/shared';
 import { LLMProvider } from '../llm/llm.types';
 import { AppConfig } from '../../config/configuration';
 import { nodes } from './nodes';
