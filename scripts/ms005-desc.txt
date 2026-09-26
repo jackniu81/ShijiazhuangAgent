@@ -1,0 +1,1 @@
+上线基线(roadmap MS-005):真实 LLM 验收与评估、pgvector 数据地基、鉴权限流、Docker 部署。目标:可给真实用户使用。

@@ -1,6 +1,6 @@
 # 石家庄旅游助手 — WebSocket API 规范
 
-> Task #1:定义 UI(Client)与 Server 的集成接口。本文档是双方唯一契约,后续实现须严格对齐。
+> Task #1 定义的双端集成契约,持续维护中(最近更新 2026-09-26,补 `plan:day` 事件)。本文档是双方契约,类型唯一来源见 §7。
 
 ## 1. 传输方式
 
@@ -60,7 +60,19 @@ interface PlanProgressEvent {
 }
 ```
 
-### 4.2 `plan:result` — 最终行程
+### 4.2 `plan:day` — 逐天流式行程（#34 新增）
+```ts
+interface PlanDayEvent {
+  requestId: string;
+  title?: string;              // 行程标题(仅首日携带)
+  day: PlanDay;                // 当天完整数据
+  totalDays: number;           // 总天数,client 据此占位 skeleton
+  summary?: string;            // 行程简介(仅首日携带)
+}
+```
+服务端生成过程中每天 emit 一次,client 逐日渲染;全部完成后仍会收到 `plan:result` 整包替换,保证最终一致。
+
+### 4.3 `plan:result` — 最终行程
 ```ts
 interface PlanResultEvent {
   requestId: string;
@@ -86,7 +98,7 @@ interface PlanItem {
 }
 ```
 
-### 4.3 `chat:token` — LLM 流式输出(逐 token)
+### 4.4 `chat:token` — LLM 流式输出(逐 token)
 ```ts
 interface ChatTokenEvent {
   requestId: string;
@@ -95,7 +107,7 @@ interface ChatTokenEvent {
 }
 ```
 
-### 4.4 `chat:done` — 回答完成
+### 4.5 `chat:done` — 回答完成
 ```ts
 interface ChatDoneEvent {
   requestId: string;
@@ -105,7 +117,7 @@ interface ChatDoneEvent {
 }
 ```
 
-### 4.5 `app:error` — 统一错误
+### 4.6 `app:error` — 统一错误
 ```ts
 interface AppErrorEvent {
   requestId?: string;          // 连接级错误时为空
@@ -126,6 +138,8 @@ Client                                 Server (LangGraph + RAG + LLM)
   │<──────────────────────────────────────│
   │  plan:progress  plan/finish ...       │
   │<──────────────────────────────────────│
+  │  plan:day × N          (逐天流式)      │
+  │<──────────────────────────────────────│
   │  plan:result                          │
   │<──────────────────────────────────────│
   │                                       │
@@ -141,8 +155,8 @@ Client                                 Server (LangGraph + RAG + LLM)
 
 现有 `/api/version` 保持不变,仅用于健康检查;所有 Agent 能力一律走 WebSocket。
 
-## 7. 实现约定(供 Task #2+ 参考)
+## 7. 实现约定
 
-- 上述 TS 类型后续抽取到 `shared/types.ts`(或先各自复制),client 与 server 保持一致
+- TS 类型契约已落地为 `@shijiazhuang-agent/shared` 包(issue #48),**唯一来源 `packages/shared/src/agent.types.ts`**,client/server 均从此导入,本文档与代码不一致时以 shared 包为准并在 PR 中同步文档
 - client 侧封装单例 socket:`connect() / createPlan() / ask() / cancel()`,事件按 requestId 分发
 - server 侧:`AgentGateway`(@WebSocketGateway namespace `/agent`)+ `AgentService`(编排 LangGraph)
