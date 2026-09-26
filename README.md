@@ -84,14 +84,21 @@ data/                          # 共 21 篇
 
 ## 文档
 
+**现势文档**（持续维护）
+
 | 文件 | 说明 |
 |------|------|
-| [docs/api-spec.md](docs/api-spec.md) | WebSocket API 规范（Server / Client 契约，持续维护） |
-| [docs/server-spec.md](docs/server-spec.md) | Server 设计规格（历史快照） |
-| [docs/ui-spec.md](docs/ui-spec.md) | Client UI 规范（历史快照） |
-| [docs/code-review.md](docs/code-review.md) | MVP 代码 Review 快照（2026-09-25） |
-| [docs/roadmap.md](docs/roadmap.md) | **今后发展规划**：pgvector 选型 / 真实 LLM / 差异化策略 / 里程碑 |
+| [docs/api-spec.md](docs/api-spec.md) | WebSocket API 规范（Server / Client 契约） |
+| [docs/roadmap.md](docs/roadmap.md) | **今后发展规划**：pgvector 选型 / 真实 LLM / 差异化策略 / 里程碑 MS-005、MS-006 |
 | [require.md](require.md) | 原始需求 |
+
+**📦 已归档**（docs/archive/，历史设计/评审快照，仅供追溯，当前状态以代码为准）
+
+| 文件 | 说明 |
+|------|------|
+| [archive/server-spec.md](docs/archive/server-spec.md) | Server 设计蓝图（Task #2 时期） |
+| [archive/ui-spec.md](docs/archive/ui-spec.md) | Client UI 规范（Task #3 时期，实现已超出） |
+| [archive/code-review.md](docs/archive/code-review.md) | MVP 代码 Review 快照（2026-09-25） |
 
 ## 项目结构
 
@@ -124,7 +131,7 @@ client/                       # React 19 + Vite + Tailwind CSS 4 前端
     │   └── types.ts          # re-export shared 包 + Client 侧 UI 消息模型
     └── test/                 # Vitest + @testing-library/react (43 tests)
 data/                         # RAG 知识库语料(21 篇 markdown,6 分类)
-docs/                         # api-spec / code-review / roadmap 等,见文档索引
+docs/                         # 现势: api-spec / roadmap;archive/: 已归档历史快照
 ```
 
 **技术栈**: NestJS 12 · @langchain/langgraph · Socket.IO · React 19 · Vite 8 · Tailwind CSS 4 · Jest(server) · Vitest(client)

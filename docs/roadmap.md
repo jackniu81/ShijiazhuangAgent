@@ -1,7 +1,7 @@
 # 石家庄旅游助手 — 今后发展规划
 
 > 本文档回答三个问题：**地基怎么打**（PostgreSQL/pgvector、真实 LLM）、**backlog 怎么排**、**凭什么比豆包/通义/ChatGPT 强**（差异化生存）。
-> 撰写日期：2026-09-26，里程碑已落地为 GitHub MS-005/MS-006（见第六节）。代码现状以 main 分支为准；历史代码 review 见 [code-review.md](./code-review.md)（C1-C4 已随 #48-#52 全部解决）。
+> 撰写日期：2026-09-26，里程碑已落地为 GitHub MS-005/MS-006（见第六节）。代码现状以 main 分支为准；历史代码 review 见 [archive/code-review.md](./archive/code-review.md)（C1-C4 已随 #48-#52 全部解决）。
 
 ---
 
@@ -12,7 +12,7 @@
 - **核心链路全通**：plan/chat 双图 + RAG 混合检索（BM25+向量+RRF+rerank）+ 三 Provider（mock/siliconflow/ollama），端到端联调 #24 ✅
 - **客户端成熟**：ChatWindow 编排、断线重连 #25、错误 toast+重试 #26、plan:day 逐日流式 #34 ✅
 - **工程化**：`@shijiazhuang-agent/shared` 类型包 #48（消除双份 types）、reducer/gateway/service/nodes 单测 #49-#52、21 篇分类语料 #28 ✅
-  （堆叠 PR #53-#57 已逐级合并：#53 已进 main，#54-#57 在栈顶分支 `test/server-service-session-issue51`，待整栈合入 main）
+  （堆叠 PR #53-#57 已经 PR #67 整体合入 main）
 - **测试规模**：server jest 11 suites / 68 tests，client vitest 7 files / 43 tests
 - **生产 blocker 仍缺**：鉴权（R1）、限流（R2）、会话持久（C5）——已立项为 #61 / #62 / #29，归入 MS-005
 

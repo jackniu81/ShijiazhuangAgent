@@ -1,7 +1,7 @@
-# 石家庄旅游助手 — MVP 代码 Review（历史快照）
+# 石家庄旅游助手 — MVP 代码 Review（📦 已归档快照）
 
 > 本文档是 MVP 交付后的系统性 review。评估日期：2026-09-25（main @ 5bc0ed3）。
-> **注意**：这是历史快照——其中 C1-C4 与测试 gap 已随 #48-#52 全部解决（堆叠 PR #53-#57 逐级合并，栈顶待整栈合入 main），各条已标注最新状态；今后规划见 [roadmap.md](./roadmap.md)。
+> **注意**：这是历史快照——其中 C1-C4 与测试 gap 已随 #48-#52 全部解决（堆叠 PR #53-#57 已合入 main），各条已标注最新状态；今后规划见 [roadmap.md](../roadmap.md)。
 
 ---
 
@@ -175,7 +175,7 @@ Socket.IO `@socket.io/rate-limit-adapter` 或 `express-rate-limit` 包装 emit h
 
 ### 🔵 二期大功能（需要 spec 升级 / 外部依赖）
 
-#### 9. 向量检索持久化（#29）→ 已归入 MS-005，选型拍板 pgvector，方案见 [roadmap.md](./roadmap.md) 第二节
+#### 9. 向量检索持久化（#29）→ 已归入 MS-005，选型拍板 pgvector，方案见 [roadmap.md](../roadmap.md) 第二节
 **前置**：先确定 embedding 模型（决定维度和供应商）
 
 - 选项 A：Chroma（Python，server 需跨进程调用）
