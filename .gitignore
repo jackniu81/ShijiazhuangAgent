@@ -11,5 +11,3 @@ npm-debug.log*
 .vscode/
 .idea/
 coverage/
-docs/
-.qoder/
