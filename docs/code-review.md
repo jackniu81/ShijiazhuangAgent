@@ -1,7 +1,7 @@
-# 石家庄旅游助手 — 实现 Review & 增强路线图
+# 石家庄旅游助手 — MVP 代码 Review（历史快照）
 
-> 本文档是 MVP 交付后的系统性 review，列出已实现清单、代码质量观察、按优先级排序的增强建议。
-> 评估日期：2026-09-25（main @ 5bc0ed3）
+> 本文档是 MVP 交付后的系统性 review。评估日期：2026-09-25（main @ 5bc0ed3）。
+> **注意**：这是历史快照——其中 C1-C4 与测试 gap 已随 #48-#52 全部解决（堆叠 PR #53-#57 逐级合并，栈顶待整栈合入 main），各条已标注最新状态；今后规划见 [roadmap.md](./roadmap.md)。
 
 ---
 
@@ -21,7 +21,7 @@
 | LLM Provider | mock / siliconflow / ollama + factory | ✅ |
 | 会话存储 | session.store.ts（内存 + TTL 自动清理） | ✅ |
 | 配置 | configuration.ts + .env.example 全套 | ✅ |
-| **单元测试** | 8 个 spec 文件（nodes / rag 4 / prompts 2 / config） | ✅ |
+| **单元测试** | 11 suites / 68 tests（含 gateway / service / session.store / nodes plan:day） | ✅ #49-#52 |
 
 ### Client（React 19 + Vite 8 + Tailwind CSS 4）
 
@@ -37,8 +37,8 @@
 | 规划表单 | PlanningForm.tsx（days/interests 校验） | ✅ |
 | 错误 toast | 内联在 ChatWindow（可恢复 + 一键重试） | ✅ |
 | Socket 封装 | socket.ts（单例 + 重连 + emit 方法） | ✅ |
-| API 类型 | lib/types.ts（与 server/agent.types.ts 镜像） | ✅ |
-| **单元测试** | 6 个 test 文件，21 tests 全绿 | ✅ |
+| API 类型 | `@shijiazhuang-agent/shared` 包单一来源,lib/types.ts 仅 re-export + UI 模型 | ✅ #48 |
+| **单元测试** | 7 files / 43 tests（含 chat.reducer 22 条） | ✅ #49 |
 
 ### API 契约（docs/api-spec.md）
 
@@ -81,22 +81,22 @@
 
 ### ⚠️ 可改进（不 blocker）
 
-| # | 观察 | 位置 | 严重度 |
-|---|------|------|:------:|
-| C1 | **types.ts 双份维护** — client/lib/types.ts 镜像 server/agent.types.ts，改一处忘另一处会类型漂移 | 两个 types.ts | ⚠️ 中 |
-| C2 | **nodes.spec.ts 未测 plan:day** — 新增的 emitPlanDays 函数无单测 | nodes.spec.ts | ⚠️ 中 |
-| C3 | **ChatWindow 单文件 570+ 行** — reducer 200 行 + socket 监听 + 渲染逻辑全在一个文件 | ChatWindow.tsx | ⚠️ 低 |
-| C4 | **无 Gateway 层单测** — agent.gateway.ts 的 requestId 校验、emit 注入逻辑无 spec | gateway.ts | ⚠️ 低 |
-| C5 | **SessionStore 仅内存** — 重启丢失会话历史；sweeper setInterval 进程被杀就停 | session.store.ts | ⚠️ 中 |
-| C6 | **server 端 sleep 300ms 硬编码** — nodes.ts emitPlanDays 的间隔不可配置 | nodes.ts:81 | ⚠️ 低 |
-| C7 | **PlanCard.streaming true 时 tips 隐藏** — 流式阶段 summary 也只在第一天 emit，完整后才全量；逻辑分散在 reducer + PlanCard 两处 | 跨文件 | ⚠️ 低 |
+| # | 观察 | 位置 | 严重度 | 状态 |
+|---|------|------|:------:|------|
+| C1 | **types.ts 双份维护** — 已抽 `@shijiazhuang-agent/shared` 包收敛 | packages/shared | ⚠️ 中 | ✅ #48 |
+| C2 | **nodes.spec.ts 未测 plan:day** — 已补逐天 emit 与取消窗口用例 | nodes.spec.ts | ⚠️ 中 | ✅ #52 |
+| C3 | **ChatWindow 单文件膨胀** — 状态机已抽至 chat.reducer | ChatWindow.tsx | ⚠️ 低 | ✅ #49 |
+| C4 | **无 Gateway 层单测** — 已补入站校验/emit 注入/取消回收 | gateway.ts | ⚠️ 低 | ✅ #50 |
+| C5 | **SessionStore 仅内存** — 重启丢失会话；作为 #29 二阶段迁入 Postgres | session.store.ts | ⚠️ 中 | 📋 MS-005 #29 |
+| C6 | **server 端 sleep 300ms 硬编码** — emitPlanDays 间隔不可配置 | nodes.ts | ⚠️ 低 | ⏳ 待做（可并入 #60） |
+| C7 | **PlanCard 流式阶段渲染逻辑分散** — 占位/填充逻辑在 reducer + 组件两处 | 跨文件 | ⚠️ 低 | ⏳ 待做 |
 
 ### 🐛 潜在风险
 
 | # | 风险 | 位置 | 严重性 | 说明 |
 |---|------|------|:------:|------|
-| R1 | **无请求鉴权** — Socket.IO namespace 无 auth middleware，任意 WS 客户端可 emit plan:create | gateway.ts | 🔴 高（生产前必加） |
-| R2 | **无并发/速率限制** — 无 per-IP 或 per-session 限流，恶意客户端可刷爆 LLM 额度 | gateway.ts | 🔴 高 |
+| R1 | **无请求鉴权** — Socket.IO namespace 无 auth middleware | gateway.ts | 🔴 高 | 📋 已立项 MS-005 #61 |
+| R2 | **无并发/速率限制** — 恶意客户端可刷爆 LLM 额度 | gateway.ts | 🔴 高 | 📋 已立项 MS-005 #62 |
 | R3 | **client requestId 不加密** — client 自己生成 uuid，理论上可伪造；server 侧未校验 origin/browser 限制 | 双端 | 🟡 中（内网/小环境可接受） |
 | R4 | **plan:day 取消窗口** — emitPlanDays 里 300ms sleep 间隔中取消，guardCancel 会在下一轮才触发 | nodes.ts | 🟡 中 |
 | R5 | **LLM 流式无回压** — siliconflow/ollama 的 stream token 回调在 server 快速 emit 给 client，但 node gateway 未检查 client 缓冲区，极端慢 client 可能丢事件 | gateway.ts | 🟢 低 |
@@ -109,7 +109,7 @@
 
 ### 🔥 立即可做（单 PR 搞定，无外部依赖）
 
-#### 1. 抽出 shared/types 包 — 解决 C1 类型漂移问题
+#### 1. 抽出 shared/types 包 — 解决 C1 类型漂移问题 ✅ 已完成（#48，PR #53）
 **成本**：0.5d | **收益**：彻底消除 client/types.ts 与 server/agent.types.ts 漂移风险
 
 ```
@@ -123,7 +123,7 @@ client 和 server 各自 `import { AgentEvents, PlanDayEvent } from '@shijiazhua
 
 > 替代方案（更轻）：在 package.json 里用 `file:` 路径让 client 直接引用 server/src/agent/agent.types.ts，避免新建 workspace。
 
-#### 2. ChatWindow reducer 抽成 hook — 解决 C3 单文件膨胀
+#### 2. ChatWindow reducer 抽成 hook — 解决 C3 单文件膨胀 ✅ 已完成（#49，抽至 chat.reducer + 22 条单测）
 **成本**：0.5d | **收益**：测试粒度细化
 
 ```typescript
@@ -133,7 +133,7 @@ export function useChatReducer(initialState: ChatState) { ... }
 
 ChatWindow 只负责 socket 监听 + 渲染，状态逻辑独立可测。
 
-#### 3. nodes.spec.ts 补 plan:day 测试 — 解决 C2
+#### 3. nodes.spec.ts 补 plan:day 测试 — 解决 C2 ✅ 已完成（#52）
 **成本**：0.2d | **收益**：覆盖新增加的 emitPlanDays 路径
 
 需要测：
@@ -149,14 +149,14 @@ ChatWindow 只负责 socket 监听 + 渲染，状态逻辑独立可测。
 
 ### 🟡 等真实需求触发
 
-#### 5. 请求鉴权（R1 风险修复）
+#### 5. 请求鉴权（R1 风险修复）→ 已立项 MS-005 #61
 **成本**：1d | **收益**：生产可部署
 
 Socket.IO namespace middleware 加 auth：
 - 最简单：`Authorization: Bearer <static-token>` 环境变量
 - 进阶：JWT + session 绑定（但需要先有用户系统）
 
-#### 6. 速率限制（R2 风险修复）
+#### 6. 速率限制（R2 风险修复）→ 已立项 MS-005 #62
 **成本**：0.5d | **收益**：防刷
 
 Socket.IO `@socket.io/rate-limit-adapter` 或 `express-rate-limit` 包装 emit handler。
@@ -175,7 +175,7 @@ Socket.IO `@socket.io/rate-limit-adapter` 或 `express-rate-limit` 包装 emit h
 
 ### 🔵 二期大功能（需要 spec 升级 / 外部依赖）
 
-#### 9. 向量检索持久化（#29）
+#### 9. 向量检索持久化（#29）→ 已归入 MS-005，选型拍板 pgvector，方案见 [roadmap.md](./roadmap.md) 第二节
 **前置**：先确定 embedding 模型（决定维度和供应商）
 
 - 选项 A：Chroma（Python，server 需跨进程调用）
@@ -184,7 +184,7 @@ Socket.IO `@socket.io/rate-limit-adapter` 或 `express-rate-limit` 包装 emit h
 
 > 当前 InMemoryVectorStore 在开发场景没问题，真实 LLM 验收 (#27) 前不需要动。
 
-#### 10. 真实 LLM 验收（#27）
+#### 10. 真实 LLM 验收（#27）→ 已归入 MS-005，配套 #58 金标评估集 / #59 JSON 校验 / #60 降级链
 **前置**：有 SiliconFlow 或 Ollama API key
 
 当前 mock 已经覆盖了完整协议，但真实 LLM 会暴露：
@@ -193,7 +193,7 @@ Socket.IO `@socket.io/rate-limit-adapter` 或 `express-rate-limit` 包装 emit h
 - RAG 检索命中率
 - Cancel 中断精度
 
-#### 11. Client 单元测试覆盖 gap
+#### 11. Client 单元测试覆盖 gap ✅ 已基本解决（#49 reducer 22 条；socket.ts 事件桥接仍无测，低优先）
 **当前已覆盖**：Layout、MessageItem、MessageList、PlanCard、StreamingText、PlanningForm（渲染层面）
 **未覆盖**：
 - ❌ **ChatWindow reducer** — 17 种 action 没有一条测试，`PLAN_DAY` 的占位 → 填充 → 替换逻辑是高风险区
@@ -239,13 +239,13 @@ Socket.IO `@socket.io/rate-limit-adapter` 或 `express-rate-limit` 包装 emit h
 
 ---
 
-## 五、总结
+## 五、总结（2026-09-26 更新）
 
 ```
 MVP 完成度: ████████████████████ 100% (核心链路全通)
-代码质量:   ███████████████████░░  90% (零技术债标记, 类型有漂移风险)
-测试覆盖:   ████████░░░░░░░░░░░░  40% (组件渲染全过, reducer 逻辑零 UT)
-生产可用:   ██████░░░░░░░░░░░░░░  30% (缺鉴权、限流、日志、持久化会话)
+代码质量:   ███████████████████░░  95% (shared 包已收敛 C1,仅余 C6/C7 小瑕疵)
+测试覆盖:   ██████████████░░░░░░░  70% (server 68 / client 43,reducer/gateway/service 已覆盖)
+生产可用:   ██████░░░░░░░░░░░░░░  30% (鉴权 #61 / 限流 #62 / 持久化 #29 / Docker #36 均在 MS-005)
 ```
 
-> 一句话：**MVP 交付达标，可以 demo；但如果要上线或让别人用，先补鉴权/限流 + 给 ChatWindow reducer 写两条测试**。
+> 一句话：**review 中的工程债（C1-C4）已全部清偿；上线剩下的就是 MS-005 四件事：真实 LLM 验收、数据持久化、鉴权、限流。**

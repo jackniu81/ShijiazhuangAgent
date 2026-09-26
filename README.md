@@ -86,60 +86,59 @@ data/                          # 共 21 篇
 
 | 文件 | 说明 |
 |------|------|
-| [docs/api-spec.md](docs/api-spec.md) | WebSocket API 规范（Server / Client 契约） |
-| [docs/server-spec.md](docs/server-spec.md) | Server 实现规范 |
-| [docs/ui-spec.md](docs/ui-spec.md) | Client UI 实现规范 |
+| [docs/api-spec.md](docs/api-spec.md) | WebSocket API 规范（Server / Client 契约，持续维护） |
+| [docs/server-spec.md](docs/server-spec.md) | Server 设计规格（历史快照） |
+| [docs/ui-spec.md](docs/ui-spec.md) | Client UI 规范（历史快照） |
+| [docs/code-review.md](docs/code-review.md) | MVP 代码 Review 快照（2026-09-25） |
+| [docs/roadmap.md](docs/roadmap.md) | **今后发展规划**：pgvector 选型 / 真实 LLM / 差异化策略 / 里程碑 |
 | [require.md](require.md) | 原始需求 |
 
 ## 项目结构
 
 ```
+packages/shared/              # @shijiazhuang-agent/shared — WS 契约类型唯一来源 (#48)
 server/                       # NestJS 12 + LangGraph 后端
 ├── src/agent/
-│   ├── agent.gateway.ts      # WebSocket 网关 (/agent namespace /ws path)
-│   ├── agent.service.ts      # 编排 chat/plan 两张 LangGraph 图
-│   ├── graph/                # chat.graph + plan.graph + nodes
+│   ├── agent.gateway.ts      # WebSocket 网关 (/agent namespace /ws path) + 单测
+│   ├── agent.service.ts      # 编排 chat/plan 两张 LangGraph 图 + 单测
+│   ├── graph/                # chat.graph + plan.graph + nodes(含 plan:day 流式)
 │   ├── prompts/              # chat.prompt + plan.prompt 模板
 │   ├── rag/                  # BM25 + 向量混合检索,RRF 融合 + rerank
+│   ├── chat/                 # session.store 会话历史 (TTL 自动清理)
 │   └── llm/                  # Provider 抽象:mock / siliconflow / ollama
+└── 单测: jest 11 suites / 68 tests
 client/                       # React 19 + Vite + Tailwind CSS 4 前端
 └── src/
     ├── components/
-    │   ├── ChatWindow.tsx    # 主容器 — useReducer + socket 事件编排
-    │   ├── Layout.tsx        # Header + Main + Footer(输入区 slot)
+    │   ├── ChatWindow.tsx    # 主容器 — socket 监听 + 渲染
+    │   ├── chat.reducer.ts   # 状态机(17 种 action)独立可测 (#49)
+    │   ├── Layout.tsx        # sticky Header + Main + Footer(输入区 slot)
     │   ├── ConnectionStatus.tsx   # 连接状态指示器
     │   ├── MessageList.tsx   # 消息滚动列表
     │   ├── MessageItem.tsx   # user / assistant(text/plan) / system 渲染
-    │   ├── PlanCard.tsx      # 行程卡片(流式占位 → 完整渲染)
+    │   ├── PlanCard.tsx      # 行程卡片(逐日流式占位 → 完整渲染)
     │   ├── StreamingText.tsx # 打字机效果 + 闪烁光标
     │   └── PlanningForm.tsx  # 行程规划表单
     ├── lib/
-    │   ├── socket.ts         # Socket.IO 单例(connect/on/emit)
-    │   └── types.ts          # 对齐 docs/api-spec.md 的 TS 类型
-    └── test/                 # Vitest + @testing-library/react (21 tests)
-data/                         # RAG 知识库语料(21 篇 markdown)
-docs/                         # api-spec.md / server-spec.md / ui-spec.md
+    │   ├── socket.ts         # Socket.IO 单例(connect/on/emit + 重连)
+    │   └── types.ts          # re-export shared 包 + Client 侧 UI 消息模型
+    └── test/                 # Vitest + @testing-library/react (43 tests)
+data/                         # RAG 知识库语料(21 篇 markdown,6 分类)
+docs/                         # api-spec / code-review / roadmap 等,见文档索引
 ```
 
-**技术栈**: NestJS 12 · @langchain/langgraph · Socket.IO · React 19 · Vite 8 · Tailwind CSS 4 · Vitest
+**技术栈**: NestJS 12 · @langchain/langgraph · Socket.IO · React 19 · Vite 8 · Tailwind CSS 4 · Jest(server) · Vitest(client)
 
 ## 任务进度
 
-**MS-001 / MS-002 已完成**
+**MS-001 问答系统 / MS-002 行程规划 / MS-003-004 工程收尾 — 已完成**
 
 - [x] Server: LangGraph 双图 + RAG 混合检索 + 会话历史 + SiliconFlow/Ollama Provider + 逐天流式 plan:day
-- [x] Client: ChatWindow + PlanningForm + MessageList + PlanCard 全组件
-- [x] 集成联调:取消链路 / 错误提示 toast / 一键重试 / sessionId 持久化
-- [x] RAG 语料扩充:6 → 21 篇，新增 hotel/transport/specialties 目录
-- [x] 流式行程生成:plan:day 事件逐天渲染 + 占位 skeleton
+- [x] Client: ChatWindow + PlanningForm + 全组件 + 断线重连 + 错误 toast + 一键重试 + sessionId 持久化
+- [x] 工程: @shijiazhuang-agent/shared 类型包 + server 68 / client 43 单测 + 21 篇分类语料
 
-**待办 (MS-003 Backlog)**
+**进行中里程碑**（详情见 [docs/roadmap.md](docs/roadmap.md)）
 
-- [ ] #27 真实 LLM 端到端验收与环境变量文档
-- [ ] #29 向量检索持久化 (Chroma / pgvector)
-- [ ] #30 行程可编辑与导出
-- [ ] #31 实时数据接入 (天气/票价)
-- [ ] #32 地图集成与动线可视化
-- [ ] #33 跨 session 长期记忆
-- [ ] #35 多语言 + 语音输入
-- [ ] #36 Docker/K8s 部署
+- [**MS-005 上线基线**](https://github.com/jackniu81/ShijiazhuangAgent/milestone/5)：#27 真实 LLM 验收 · #29 pgvector 持久化 · #36 Docker · #58 金标评估集 · #59 JSON 校验 · #60 降级链 · #61 鉴权 · #62 限流
+- [**MS-006 差异化闭环**](https://github.com/jackniu81/ShijiazhuangAgent/milestone/6)：#30 行程编辑导出 · #31 实时数据 · #32 地图 · #63 行程校验节点 · #64 语料时效 · #65 分享链接 · #66 对比评估报告
+- **MS-999 观察项**：#33 长期记忆个性化 · #35 多语言语音
