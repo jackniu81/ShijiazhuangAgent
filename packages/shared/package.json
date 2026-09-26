@@ -1,0 +1,12 @@
+{
+  "name": "@shijiazhuang-agent/shared",
+  "version": "0.1.0",
+  "private": true,
+  "description": "WebSocket API 契约类型 —— server 与 client 唯一来源(对齐 docs/api-spec.md)",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "watch": "tsc -p tsconfig.json --watch"
+  }
+}

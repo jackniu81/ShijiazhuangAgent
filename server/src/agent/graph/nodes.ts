@@ -8,7 +8,7 @@ import {
   PlanProgressEvent,
   PlanResultEvent,
   TravelPlan,
-} from '../agent.types';
+} from '@shijiazhuang-agent/shared';
 import { buildChatMessages } from '../prompts/chat.prompt';
 import { buildPlanMessages } from '../prompts/plan.prompt';
 import { uniqueSources, uniqueTitles } from '../prompts/util';

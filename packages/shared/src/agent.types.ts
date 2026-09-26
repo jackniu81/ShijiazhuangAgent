@@ -1,6 +1,7 @@
 /**
  * WebSocket API 契约类型 —— 严格对齐 docs/api-spec.md
- * server 与 client 共用,后续可抽取到 shared/。
+ * server 与 client 共用,本文件是唯一来源(issue #48,原 server/agent.types.ts 与
+ * client/lib/types.ts 双份镜像在此收敛)。
  */
 
 // ---------- 事件名 ----------

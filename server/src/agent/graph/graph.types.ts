@@ -1,7 +1,6 @@
 import type { Msg } from '../llm/llm.types';
-import type { PlanCreatePayload } from '../agent.types';
+import type { PlanCreatePayload, TravelPlan } from '@shijiazhuang-agent/shared';
 import type { RetrievedDoc } from '../rag/rag.types';
-import type { TravelPlan } from '../agent.types';
 import type { Emit, IsCancelled } from '../agent.service';
 import type { LLMProvider } from '../llm/llm.types';
 import type { AppConfig } from '../../config/configuration';

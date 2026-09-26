@@ -6,12 +6,13 @@
   "description": "React (Vite) client — 石家庄旅游助手 Chat",
   "scripts": {
     "dev": "vite",
-    "build": "tsc -p tsconfig.build.json && vite build",
+    "build": "tsc -p ../packages/shared/tsconfig.json && tsc -p tsconfig.build.json && vite build",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest"
   },
   "dependencies": {
+    "@shijiazhuang-agent/shared": "*",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "socket.io-client": "^4.8.1"
