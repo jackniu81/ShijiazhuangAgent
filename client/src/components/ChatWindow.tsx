@@ -1,18 +1,48 @@
-import { useEffect, useReducer, useRef, type KeyboardEvent } from 'react';
+import { useEffect, useReducer, useRef, useState, type KeyboardEvent } from 'react';
 import { agentSocket } from '../lib/socket';
 import {
   AgentEvents,
   type AppErrorEvent,
+  type ChatAskPayload,
   type ChatDoneEvent,
   type ChatMessage,
   type ChatTokenEvent,
   type PlanCreatePayload,
+  type PlanDayEvent,
   type PlanProgressEvent,
   type PlanResultEvent,
+  type TravelPlan,
 } from '../lib/types';
 import Layout from './Layout';
 import MessageList from './MessageList';
 import PlanningForm from './PlanningForm';
+
+// ---------- Session 持久化 ----------
+const SESSION_KEY = 'shijiazhuang-agent-session-id';
+
+function loadSessionId(): string {
+  try {
+    const stored = sessionStorage.getItem(SESSION_KEY);
+    if (stored) return stored;
+  } catch {
+    // 忽略(某些隐私模式 sessionStorage 可能不可用)
+  }
+  return makeId();
+}
+
+function persistSessionId(id: string): void {
+  try {
+    sessionStorage.setItem(SESSION_KEY, id);
+  } catch {
+    // 忽略
+  }
+}
+
+// ---------- Last request(供重试) ----------
+type LastRequest =
+  | { kind: 'chat'; requestId: string; sessionId: string; question: string }
+  | { kind: 'plan'; requestId: string; input: PlanCreatePayload['input'] }
+  | null;
 
 // ---------- State & Reducer ----------
 
@@ -23,7 +53,9 @@ interface ChatState {
   isStreaming: boolean;
   pendingRequestId?: string;
   streamingMessageId?: string;
+  streamingPlanId?: string;
   showPlanningForm: boolean;
+  toast?: { code: string; message: string; recoverable: boolean };
 }
 
 type ChatAction =
@@ -31,12 +63,14 @@ type ChatAction =
   | { type: 'DISCONNECT' }
   | { type: 'SEND_PLAN'; requestId: string; userMsg: string }
   | { type: 'PLAN_PROGRESS'; data: PlanProgressEvent }
+  | { type: 'PLAN_DAY'; data: PlanDayEvent }
   | { type: 'PLAN_RESULT'; data: PlanResultEvent }
   | { type: 'SEND_CHAT'; requestId: string; question: string }
   | { type: 'CHAT_TOKEN'; data: ChatTokenEvent }
   | { type: 'CHAT_DONE'; data: ChatDoneEvent }
-  | { type: 'APP_ERROR'; data: AppErrorEvent }
+  | { type: 'APP_ERROR'; data: AppErrorEvent; recoverable: boolean }
   | { type: 'TIMEOUT' }
+  | { type: 'CLEAR_TOAST' }
   | { type: 'TOGGLE_PLANNING_FORM'; show?: boolean };
 
 function makeId(): string {
@@ -46,6 +80,8 @@ function makeId(): string {
   // jsdom fallback
   return 'id-' + Math.random().toString(36).slice(2) + Date.now().toString(36);
 }
+
+const RECOVERABLE_CODES: Set<AppErrorEvent['code']> = new Set(['LLM_ERROR', 'RAG_ERROR', 'INTERNAL']);
 
 function reducer(state: ChatState, action: ChatAction): ChatState {
   const now = Date.now();
@@ -67,6 +103,7 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         pendingRequestId: action.requestId,
         isStreaming: true,
         showPlanningForm: false,
+        toast: undefined,
       };
 
     case 'PLAN_PROGRESS': {
@@ -81,6 +118,48 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
       };
     }
 
+    case 'PLAN_DAY': {
+      if (state.pendingRequestId && action.data.requestId !== state.pendingRequestId) return state;
+      const ev = action.data;
+
+      if (!state.streamingPlanId) {
+        // 首次:创建带占位的 streaming plan message
+        const placeholderDays = Array.from({ length: ev.totalDays }, (_, i) => ({
+          day: i + 1,
+          items: [] as TravelPlan['days'][number]['items'],
+        }));
+        const planMsg: ChatMessage = {
+          id: makeId(),
+          role: 'assistant',
+          kind: 'plan',
+          plan: {
+            title: ev.title ?? '行程规划中',
+            days: placeholderDays,
+            summary: ev.summary,
+          },
+          streaming: true,
+          timestamp: now,
+        };
+        return {
+          ...state,
+          messages: [...state.messages, planMsg],
+          streamingPlanId: planMsg.id,
+        };
+      }
+
+      // 后续:追加到现有 plan message,替换对应 day
+      return {
+        ...state,
+        messages: state.messages.map((m) => {
+          if (m.id !== state.streamingPlanId || m.role !== 'assistant' || m.kind !== 'plan') return m;
+          const updatedDays = m.plan.days.map((d) =>
+            d.day === ev.day.day ? ev.day : d
+          );
+          return { ...m, plan: { ...m.plan, days: updatedDays } };
+        }),
+      };
+    }
+
     case 'PLAN_RESULT': {
       if (state.pendingRequestId && action.data.requestId !== state.pendingRequestId) return state;
       const planMsg: ChatMessage = {
@@ -90,11 +169,27 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         plan: action.data.plan,
         timestamp: now,
       };
+
+      // 如果之前有 streaming plan message,替换它;否则直接追加
+      if (state.streamingPlanId) {
+        return {
+          ...state,
+          messages: state.messages.map((m) =>
+            m.id === state.streamingPlanId ? planMsg : m
+          ),
+          pendingRequestId: undefined,
+          streamingPlanId: undefined,
+          isStreaming: false,
+          toast: undefined,
+        };
+      }
+
       return {
         ...state,
         messages: [...state.messages, planMsg],
         pendingRequestId: undefined,
         isStreaming: false,
+        toast: undefined,
       };
     }
 
@@ -117,6 +212,7 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         pendingRequestId: action.requestId,
         streamingMessageId: emptyAssistant.id,
         isStreaming: true,
+        toast: undefined,
       };
     }
 
@@ -137,7 +233,6 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
     case 'CHAT_DONE': {
       if (state.pendingRequestId && action.data.requestId !== state.pendingRequestId) return state;
       if (!state.streamingMessageId) return state;
-      // 用完整 answer 兜底（与 token 拼接一致,容错）,附加 sources
       return {
         ...state,
         messages: state.messages.map((m) =>
@@ -148,6 +243,7 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         pendingRequestId: undefined,
         streamingMessageId: undefined,
         isStreaming: false,
+        toast: undefined,
       };
     }
 
@@ -155,7 +251,6 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
       if (state.pendingRequestId && action.data.requestId !== state.pendingRequestId) return state;
 
       if (action.data.code === 'CANCELLED' && state.streamingMessageId) {
-        // 流式中途取消 → 在 assistant 消息标记 cancelled
         return {
           ...state,
           messages: state.messages.map((m) =>
@@ -165,28 +260,66 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
           ),
           pendingRequestId: undefined,
           streamingMessageId: undefined,
+          streamingPlanId: undefined,
           isStreaming: false,
+          toast: undefined,
         };
       }
 
-      const isUserError = action.data.code === 'INVALID_INPUT';
+      // plan 流式构建中取消:标记已有的天数
+      if (action.data.code === 'CANCELLED' && state.streamingPlanId) {
+        return {
+          ...state,
+          messages: state.messages.map((m) =>
+            m.id === state.streamingPlanId && m.role === 'assistant' && m.kind === 'plan'
+              ? { ...m, streaming: false }
+              : m
+          ),
+          pendingRequestId: undefined,
+          streamingPlanId: undefined,
+          isStreaming: false,
+          toast: undefined,
+        };
+      }
+
+      if (action.data.code === 'INVALID_INPUT') {
+        // INVALID_INPUT: PlanningForm 内部校验兜底,这里不再追加 system 消息
+        return {
+          ...state,
+          pendingRequestId: undefined,
+          streamingMessageId: undefined,
+          streamingPlanId: undefined,
+          isStreaming: false,
+          toast: {
+            code: 'INVALID_INPUT',
+            message: action.data.message || '输入有误,请检查后重试',
+            recoverable: true,
+          },
+        };
+      }
+
+      // 其它错误 → 显示 toast + 追加 system error 消息
       return {
         ...state,
-        messages: isUserError
-          ? state.messages // INVALID_INPUT 不新添消息,直接忽略(PlanningForm 内部处理)
-          : [
-              ...state.messages,
-              {
-                id: makeId(),
-                role: 'system',
-                type: 'error',
-                content: action.data.message || '抱歉,服务暂时不可用',
-                timestamp: now,
-              },
-            ],
+        messages: [
+          ...state.messages,
+          {
+            id: makeId(),
+            role: 'system',
+            type: 'error',
+            content: action.data.message || '抱歉,服务暂时不可用',
+            timestamp: now,
+          },
+        ],
         pendingRequestId: undefined,
         streamingMessageId: undefined,
+        streamingPlanId: undefined,
         isStreaming: false,
+        toast: {
+          code: action.data.code,
+          message: action.data.message || '抱歉,服务暂时不可用',
+          recoverable: action.recoverable,
+        },
       };
     }
 
@@ -205,8 +338,13 @@ function reducer(state: ChatState, action: ChatAction): ChatState {
         ],
         pendingRequestId: undefined,
         streamingMessageId: undefined,
+        streamingPlanId: undefined,
         isStreaming: false,
+        toast: { code: 'TIMEOUT', message: '响应超时,请重试', recoverable: true },
       };
+
+    case 'CLEAR_TOAST':
+      return { ...state, toast: undefined };
 
     case 'TOGGLE_PLANNING_FORM':
       return { ...state, showPlanningForm: action.show ?? !state.showPlanningForm };
@@ -236,22 +374,21 @@ function defaultProgressText(node: PlanProgressEvent['node'], status: PlanProgre
 // ---------- Component ----------
 
 export default function ChatWindow() {
-  const sessionIdRef = useRef<string>('');
+  const [sessionId] = useState<string>(() => loadSessionId());
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-
-  if (!sessionIdRef.current) {
-    sessionIdRef.current = makeId();
-  }
+  const lastRequestRef = useRef<LastRequest>(null);
 
   const [state, dispatch] = useReducer(reducer, {
     messages: [],
-    sessionId: sessionIdRef.current,
+    sessionId,
     isConnected: false,
     isStreaming: false,
     pendingRequestId: undefined,
     streamingMessageId: undefined,
+    streamingPlanId: undefined,
     showPlanningForm: false,
+    toast: undefined,
   });
 
   // ---------- Socket 连接 + 事件监听 ----------
@@ -265,9 +402,15 @@ export default function ChatWindow() {
       resetTimeout();
       dispatch({ type: 'PLAN_PROGRESS', data });
     };
+    const onPlanDay = (data: PlanDayEvent) => {
+      resetTimeout();
+      dispatch({ type: 'PLAN_DAY', data });
+    };
     const onPlanResult = (data: PlanResultEvent) => {
       clearTimeoutRef();
       dispatch({ type: 'PLAN_RESULT', data });
+      // 成功 → 清除 lastRequest(已完成)
+      lastRequestRef.current = null;
     };
     const onChatToken = (data: ChatTokenEvent) => {
       resetTimeout();
@@ -276,25 +419,29 @@ export default function ChatWindow() {
     const onChatDone = (data: ChatDoneEvent) => {
       clearTimeoutRef();
       dispatch({ type: 'CHAT_DONE', data });
+      lastRequestRef.current = null;
     };
     const onAppError = (data: AppErrorEvent) => {
       clearTimeoutRef();
-      dispatch({ type: 'APP_ERROR', data });
+      const recoverable = RECOVERABLE_CODES.has(data.code);
+      dispatch({ type: 'APP_ERROR', data, recoverable });
+      if (data.code === 'CANCELLED') lastRequestRef.current = null;
     };
 
     agentSocket.onConnectionChange(onStateChange);
     agentSocket.on(AgentEvents.PLAN_PROGRESS, onPlanProgress);
+    agentSocket.on(AgentEvents.PLAN_DAY, onPlanDay);
     agentSocket.on(AgentEvents.PLAN_RESULT, onPlanResult);
     agentSocket.on(AgentEvents.CHAT_TOKEN, onChatToken);
     agentSocket.on(AgentEvents.CHAT_DONE, onChatDone);
     agentSocket.on(AgentEvents.APP_ERROR, onAppError);
 
-    // 初始状态
     onStateChange(agentSocket.connected);
 
     return () => {
       agentSocket.offConnectionChange(onStateChange);
       agentSocket.off(AgentEvents.PLAN_PROGRESS, onPlanProgress);
+      agentSocket.off(AgentEvents.PLAN_DAY, onPlanDay);
       agentSocket.off(AgentEvents.PLAN_RESULT, onPlanResult);
       agentSocket.off(AgentEvents.CHAT_TOKEN, onChatToken);
       agentSocket.off(AgentEvents.CHAT_DONE, onChatDone);
@@ -303,6 +450,11 @@ export default function ChatWindow() {
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // sessionId 持久化
+  useEffect(() => {
+    persistSessionId(sessionId);
+  }, [sessionId]);
 
   // ---------- 超时计时器 ----------
   const clearTimeoutRef = () => {
@@ -322,28 +474,30 @@ export default function ChatWindow() {
 
   // ---------- 发送动作 ----------
 
+  const canSubmit = () => state.isConnected && !state.isStreaming;
+
   const handleSendChat = () => {
+    if (!canSubmit()) return;
     const el = textareaRef.current;
     const text = el?.value?.trim() ?? '';
-    if (!text || state.isStreaming) return;
+    if (!text) return;
 
     const requestId = makeId();
+    lastRequestRef.current = { kind: 'chat', requestId, sessionId, question: text };
     dispatch({ type: 'SEND_CHAT', requestId, question: text });
     el!.value = '';
     startTimeout();
 
-    agentSocket.ask({
-      requestId,
-      sessionId: sessionIdRef.current,
-      question: text,
-    });
+    const payload: ChatAskPayload = { requestId, sessionId, question: text };
+    agentSocket.ask(payload);
   };
 
   const handlePlanSubmit = (input: PlanCreatePayload['input']) => {
-    if (state.isStreaming) return;
+    if (!canSubmit()) return;
 
     const requestId = makeId();
-    // 构造用户可视化消息
+    lastRequestRef.current = { kind: 'plan', requestId, input };
+
     const parts: string[] = [`规划 ${input.days} 天行程`];
     if (input.startDate) parts.push(`出发 ${input.startDate}`);
     if (input.travelers) parts.push(`${input.travelers} 人`);
@@ -362,6 +516,29 @@ export default function ChatWindow() {
     clearTimeoutRef();
   };
 
+  const handleRetry = () => {
+    const last = lastRequestRef.current;
+    if (!last || !canSubmit()) return;
+
+    if (last.kind === 'chat') {
+      const requestId = makeId();
+      lastRequestRef.current = { ...last, requestId };
+      dispatch({ type: 'SEND_CHAT', requestId, question: last.question });
+      startTimeout();
+      agentSocket.ask({ requestId, sessionId: last.sessionId, question: last.question });
+    } else {
+      const requestId = makeId();
+      lastRequestRef.current = { ...last, requestId };
+      const parts: string[] = [`规划 ${last.input.days} 天行程(重试)`];
+      if (last.input.startDate) parts.push(`出发 ${last.input.startDate}`);
+      const userMsg = parts.join(' · ');
+      dispatch({ type: 'SEND_PLAN', requestId, userMsg });
+      startTimeout();
+      agentSocket.createPlan({ requestId, input: last.input });
+    }
+    dispatch({ type: 'CLEAR_TOAST' });
+  };
+
   const handleTextareaKey = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -369,30 +546,72 @@ export default function ChatWindow() {
     }
   };
 
+  // ---------- Toast 自动消失 ----------
+  useEffect(() => {
+    if (!state.toast) return;
+    const t = setTimeout(() => dispatch({ type: 'CLEAR_TOAST' }), 6000);
+    return () => clearTimeout(t);
+  }, [state.toast]);
+
   // ---------- Render ----------
+
+  const toast = state.toast && (
+    <div
+      className={[
+        'flex items-center gap-2 rounded-lg px-3 py-2 text-xs shadow-sm ring-1 animate-slide-up',
+        state.toast.recoverable
+          ? 'bg-amber-50 text-amber-700 ring-amber-200'
+          : 'bg-red-50 text-red-700 ring-red-200',
+      ].join(' ')}
+      role="alert"
+      data-testid="error-toast"
+    >
+      <span>⚠️ {state.toast.message}</span>
+      <div className="ml-auto flex items-center gap-2">
+        {state.toast.recoverable && (
+          <button
+            type="button"
+            onClick={handleRetry}
+            disabled={!canSubmit()}
+            className="rounded bg-amber-500 px-2 py-0.5 text-[11px] font-medium text-white transition hover:bg-amber-600 disabled:cursor-not-allowed disabled:opacity-50"
+            data-testid="retry-btn"
+          >
+            重试
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => dispatch({ type: 'CLEAR_TOAST' })}
+          className="text-slate-400 hover:text-slate-600"
+        >
+          ✕
+        </button>
+      </div>
+    </div>
+  );
 
   const footer = (
     <div className="flex flex-col gap-2 pt-1">
-      {/* PlanningForm 条件展开 */}
+      {toast}
+
       {state.showPlanningForm && (
         <PlanningForm
           onSubmit={handlePlanSubmit}
-          submitting={state.isStreaming}
+          submitting={state.isStreaming || !state.isConnected}
         />
       )}
 
-      {/* 输入区 */}
       <div className="flex items-end gap-2">
         <button
           type="button"
           onClick={() => dispatch({ type: 'TOGGLE_PLANNING_FORM' })}
-          disabled={state.isStreaming}
+          disabled={!state.isConnected || state.isStreaming}
           className={[
             'shrink-0 rounded-md px-3 py-1.5 text-xs font-medium transition',
             state.showPlanningForm
               ? 'bg-emerald-500 text-white hover:bg-emerald-600'
               : 'bg-slate-100 text-slate-600 hover:bg-slate-200',
-            state.isStreaming ? 'cursor-not-allowed opacity-50' : '',
+            !state.isConnected || state.isStreaming ? 'cursor-not-allowed opacity-50' : '',
           ].join(' ')}
         >
           📋 规划行程
@@ -403,7 +622,7 @@ export default function ChatWindow() {
           placeholder={state.showPlanningForm ? '或直接输入问题…' : '输入你的问题…'}
           rows={1}
           onKeyDown={handleTextareaKey}
-          disabled={state.isStreaming}
+          disabled={!state.isConnected || state.isStreaming}
           className="flex-1 resize-none rounded-md border border-slate-300 px-3 py-2 text-sm outline-none transition focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-100"
           data-testid="chat-input"
         />
@@ -421,7 +640,7 @@ export default function ChatWindow() {
           <button
             type="button"
             onClick={handleSendChat}
-            disabled={!state.isConnected}
+            disabled={!canSubmit()}
             className="shrink-0 rounded-md bg-emerald-500 px-4 py-1.5 text-xs font-medium text-white shadow-sm transition hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50"
             data-testid="send-btn"
           >

@@ -11,6 +11,7 @@ export const AgentEvents = {
   TASK_CANCEL: 'task:cancel',
   // server -> client
   PLAN_PROGRESS: 'plan:progress',
+  PLAN_DAY: 'plan:day',
   PLAN_RESULT: 'plan:result',
   CHAT_TOKEN: 'chat:token',
   CHAT_DONE: 'chat:done',
@@ -71,6 +72,14 @@ export interface TravelPlan {
   tips?: string[];
 }
 
+export interface PlanDayEvent {
+  requestId: string;
+  title?: string;
+  day: PlanDay;
+  totalDays: number;
+  summary?: string;
+}
+
 export interface PlanResultEvent {
   requestId: string;
   plan: TravelPlan;
@@ -124,6 +133,8 @@ export type ChatMessage =
       role: 'assistant';
       kind: 'plan';
       plan: TravelPlan;
+      /** 流式构建中,前端显示占位天数 */
+      streaming?: boolean;
       timestamp: number;
     }
   | {
