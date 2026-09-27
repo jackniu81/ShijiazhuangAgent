@@ -54,6 +54,14 @@ npm run build             # 根脚本:依次构建 client + server
 node server/dist/main.js  # server 同端口托管 client/dist,单源部署(WebSocket /ws 同源)
 ```
 
+## 容器部署
+
+```bash
+docker compose up -d --build   # 一个镜像含 server + client,暴露 :3000
+```
+
+镜像分层、可选 Ollama/postgres profile 与上线待补清单见 [docs/deploy.md](docs/deploy.md)。
+
 ## 环境变量
 
 | 变量 | 默认 | 说明 |
@@ -90,6 +98,7 @@ data/                          # 共 21 篇
 |------|------|
 | [docs/api-spec.md](docs/api-spec.md) | WebSocket API 规范（Server / Client 契约） |
 | [docs/llm-providers.md](docs/llm-providers.md) | LLM Provider 切换 / 环境变量 / 回退降级策略 / 端到端验收记录 |
+| [docs/deploy.md](docs/deploy.md) | 部署与运维：镜像 / Docker Compose / 环境变量 / 上线待补清单 |
 | [docs/roadmap.md](docs/roadmap.md) | **今后发展规划**：pgvector 选型 / 真实 LLM / 差异化策略 / 里程碑 MS-005、MS-006 |
 | [require.md](require.md) | 原始需求 |
 
