@@ -12,6 +12,20 @@ describe('buildAppConfig 默认值与开关(issue #9 相关)', () => {
     expect(c.llm.timeoutMs).toBe(180000);
   });
 
+  it('降级链(issue #60):默认开启 + 3 次失败熔断 60s,参数可覆盖', () => {
+    expect(buildAppConfig({}).llm.fallback).toEqual({
+      enabled: true,
+      circuitFailures: 3,
+      circuitCooldownMs: 60_000,
+    });
+    const c = buildAppConfig({
+      LLM_FALLBACK: '0',
+      LLM_CIRCUIT_FAILURES: '5',
+      LLM_CIRCUIT_COOLDOWN_MS: '1000',
+    });
+    expect(c.llm.fallback).toEqual({ enabled: false, circuitFailures: 5, circuitCooldownMs: 1000 });
+  });
+
   it('限流默认值(issue #62):并发 1 + 每分钟 30 次', () => {
     const c = buildAppConfig({});
     expect(c.rateLimit.maxConcurrentPerSession).toBe(1);

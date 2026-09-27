@@ -36,3 +36,15 @@ export function buildPlanMessages(input: PlanPromptInput, docs: RetrievedDoc[]):
     { role: 'user', content: formatPlanRequest(input, docs) },
   ];
 }
+
+/** 是否本模板发出的行程请求(供 mock 识别:降级到 mock 时也要回合法 JSON,见 issue #60)。 */
+export function isPlanPrompt(messages: Msg[]): boolean {
+  return messages.some((m) => m.role === 'system' && m.content === PLAN_SYSTEM_PROMPT);
+}
+
+/** 从行程请求里读回天数;读不到按 1 天保守处理。 */
+export function planRequestedDays(messages: Msg[]): number {
+  const user = [...messages].reverse().find((m) => m.role === 'user');
+  const days = Number(/天数=(\d+)/.exec(user?.content ?? '')?.[1]);
+  return Number.isInteger(days) && days > 0 ? days : 1;
+}

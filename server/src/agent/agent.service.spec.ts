@@ -40,6 +40,7 @@ function makeConfig(over: Partial<AppConfig['llm']> & Partial<AppConfig['chat']>
     llm: {
       provider: 'mock',
       timeoutMs: over.timeoutMs ?? 5000,
+      fallback: { enabled: true, circuitFailures: 3, circuitCooldownMs: 60_000 },
       siliconflow: { apiKey: '', baseUrl: '', chatModel: '', embedModel: '' },
       ollama: { baseUrl: '', chatModel: '', embedModel: '' },
     },

@@ -13,6 +13,17 @@ export interface AppConfig {
   llm: {
     provider: LlmProviderName;
     timeoutMs: number;
+    /**
+     * 运行期降级链(issue #60):siliconflow → ollama → mock,主 provider 失败时按序承接。
+     * enabled=false 时工厂只返回主 provider,行为与改动前一致。
+     */
+    fallback: {
+      enabled: boolean;
+      /** 同一 provider 连续失败多少次后开熔断(临时跳过它)。 */
+      circuitFailures: number;
+      /** 熔断冷却时长,到期后放行一次探测。 */
+      circuitCooldownMs: number;
+    };
     siliconflow: {
       apiKey: string;
       baseUrl: string;
@@ -82,6 +93,11 @@ export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig 
     llm: {
       provider: provider(env.LLM_PROVIDER),
       timeoutMs: int(env.LLM_TIMEOUT_MS, 180000),
+      fallback: {
+        enabled: bool(env.LLM_FALLBACK, true),
+        circuitFailures: int(env.LLM_CIRCUIT_FAILURES, 3),
+        circuitCooldownMs: int(env.LLM_CIRCUIT_COOLDOWN_MS, 60_000),
+      },
       siliconflow: {
         apiKey: env.SILICONFLOW_API_KEY ?? '',
         baseUrl: env.SILICONFLOW_BASE_URL ?? 'https://api.siliconflow.cn/v1',

@@ -18,6 +18,13 @@ export interface LLMProvider {
   /** 厂商标识,如 'mock' | 'siliconflow' | 'ollama' */
   readonly name: string;
 
+  /**
+   * 降级链专用(issue #60):当前实际承接请求的厂商标识。
+   * 已发生过请求时取最近一次成功承接者;尚无请求时按熔断状态预估。
+   * 单 provider 实现省略此方法。
+   */
+  activeProvider?(): string;
+
   /** 非流式对话,返回完整文本。 */
   chat(messages: Msg[], options?: ChatOptions): Promise<string>;
 

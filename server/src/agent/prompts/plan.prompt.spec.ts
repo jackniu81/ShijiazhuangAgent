@@ -1,6 +1,6 @@
 import { RetrievedDoc } from '../rag/rag.types';
 import { uniqueSources, uniqueTitles } from './util';
-import { buildPlanMessages, PLAN_SCHEMA_HINT, PLAN_SYSTEM_PROMPT } from './plan.prompt';
+import { buildPlanMessages, isPlanPrompt, PLAN_SCHEMA_HINT, PLAN_SYSTEM_PROMPT, planRequestedDays } from './plan.prompt';
 
 const doc = (title: string, source: string, text = 'x'): RetrievedDoc => ({
   text,
@@ -35,6 +35,22 @@ describe('plan.prompt', () => {
     expect(user).toContain('兴趣=山水/红色');
     expect(user).toContain('- 苍岩山:' + '山'.repeat(120));
     expect(user).not.toContain('山'.repeat(121));
+  });
+});
+
+describe('plan.prompt 行程请求识别 (#60)', () => {
+  it('命中 PLAN_SYSTEM_PROMPT 即判定为行程请求,问答模板不误判', () => {
+    expect(isPlanPrompt(buildPlanMessages({ days: 2 }, []))).toBe(true);
+    expect(isPlanPrompt([{ role: 'system', content: '你是问答助手' }, { role: 'user', content: '天数=3' }])).toBe(false);
+    expect(isPlanPrompt([])).toBe(false);
+  });
+
+  it('从需求行读回天数;缺失或非法按 1 天保守处理', () => {
+    expect(planRequestedDays(buildPlanMessages({ days: 4 }, []))).toBe(4);
+    expect(planRequestedDays([{ role: 'user', content: '需求:天数=7,人数=2' }])).toBe(7);
+    expect(planRequestedDays([{ role: 'user', content: '没有天数字段' }])).toBe(1);
+    expect(planRequestedDays([{ role: 'user', content: '天数=0' }])).toBe(1);
+    expect(planRequestedDays([])).toBe(1);
   });
 });
 

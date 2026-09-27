@@ -1,10 +1,12 @@
 import { ChatOptions, LLMProvider, Msg } from './llm.types';
+import { isPlanPrompt, planRequestedDays } from '../prompts/plan.prompt';
 
 /**
  * MockProvider —— 无外部依赖的假实现,用于在接入真实 LLM 前跑通全链路。
  * - embed:字符 bigram 哈希投影为固定维向量并做 L2 归一化,
  *   使文本重叠度越高、余弦相似度越大,给 RAG 提供真实可用的排序信号。
- * - chat/stream:回放模板化中文回答(可流式),不依赖模型。
+ * - chat/stream:回放模板化中文回答(可流式),不依赖模型;
+ *   命中行程 prompt 时回放模板 JSON,保证降级到 mock 也不会吐出无法解析的行程。
  * 行程生成的结构化对象由图节点在 mock 模式下用代码组装(见 graph/),
  * 真模型接入后改由 chat 返回 JSON,MockProvider 无需改动。
  */
@@ -20,7 +22,7 @@ export class MockProvider implements LLMProvider {
   }
 
   async chat(messages: Msg[], _options?: ChatOptions): Promise<string> {
-    return this.composeAnswer(messages);
+    return this.compose(messages);
   }
 
   async stream(
@@ -28,7 +30,7 @@ export class MockProvider implements LLMProvider {
     onToken: (token: string) => void,
     options?: ChatOptions,
   ): Promise<string> {
-    const answer = this.composeAnswer(messages);
+    const answer = this.compose(messages);
     let emitted = '';
     for (const token of tokenize(answer)) {
       if (options?.signal?.aborted) return emitted; // 取消/超时中断回放
@@ -44,6 +46,26 @@ export class MockProvider implements LLMProvider {
   }
 
   // ---------- internals ----------
+
+  /** 行程请求走 JSON 模板,其余走问答模板(降级链落到 mock 时仍需可解析,见 issue #60)。 */
+  private compose(messages: Msg[]): string {
+    return isPlanPrompt(messages) ? this.composePlan(planRequestedDays(messages)) : this.composeAnswer(messages);
+  }
+
+  private composePlan(days: number): string {
+    return JSON.stringify({
+      title: `石家庄 ${days} 日休闲游`,
+      days: Array.from({ length: days }, (_, i) => ({
+        day: i + 1,
+        items: [
+          { time: '09:00', title: '河北博物院', place: '市区', description: '上午首站,人少时体验更佳。' },
+          { time: '14:00', title: '正定古城', place: '正定', description: '下午转场古城,夜游南城门。' },
+        ],
+      })),
+      summary: '主模型暂不可用,这份是兜底模板行程,建议稍后重试获取真实规划。',
+      tips: ['(Mock 行程,接入真实 LLM 后由模型生成)'],
+    });
+  }
 
   private embedOne(text: string): number[] {
     const vec = new Array<number>(this.dim).fill(0);
