@@ -72,9 +72,17 @@ npm run start -w server
 
 **结论：chat + plan 全链路真实 LLM 验收 PASS ✅**。慢是免费池队列特性；代码默认超时已按此实测上调为 `LLM_TIMEOUT_MS=180000`，根治靠付费额度/更快模型，或 #59 运行期跨 Provider 降级。
 
-### Ollama
+### Ollama（qwen3:1.7b，本机实测 2026-09-27）
 
-本轮未实测（本机仅有 qwen3 系列、无 embedding 模型）。按第 1 节命令 pull 模型后即可用 `LLM_PROVIDER=ollama` 复测。
+`LLM_PROVIDER=ollama` + `OLLAMA_CHAT_MODEL=qwen3:1.7b`，全链路 E2E 两轮 PASS：
+
+| 指标 | 冷启动首轮 | 热态第二轮 |
+|------|-----------|-----------|
+| chat 首 token | 37.4s（含模型载入内存） | **2.2s** |
+| chat 总耗时 | 38.0s | 2.8s |
+| plan(2 天) 全程 | ~8.6s | ~8.3s |
+
+**限制**：本机无 embedding 模型（qwen3:1.7b 试作 embed 返回 500/501），启动时 RAG 索引构建失败→**优雅降级为无检索模式**（已实测降级路径工作正常：回答不带 sources，链路不断）。要解锁完整 RAG 需 `ollama pull bge-m3`；首次请求的 35s 冷启动载入可考虑生产环境预热或常驻。
 
 ### 附：SiliconFlow 候选模型速度基准（2026-09-27，两轮采样）
 
@@ -87,7 +95,7 @@ npm run start -w server
 | THUDM/GLM-Z1-9B-0414 | 5.9 ~ 9.7 | 6.9 ~ 10.7 | 推理模型，思考链计入延迟 |
 | Qwen/Qwen3.5-4B | 152.9 ~ 162.5 | 154.7 ~ 164.0 | 最慢（默认思考模式+免费池拥堵），不建议 |
 
-> 此前 Run 2 用 Qwen3.5-4B 的 45~163s 尾延即此因；换 GLM-4-9B 后整体链路可降至秒级，`LLM_TIMEOUT_MS=180000` 仅作兼容慢池的保险值。
+> 此前 Run 2 用 Qwen3.5-4B 的 45~163s 尾延即此因；换 GLM-4-9B 后整体链路可降至秒级，`LLM_TIMEOUT_MS=180000` 仅作兼容慢池的保险值。本地 Ollama qwen3:1.7b 热态表现见上节，速度介于两者之间且免网免密。
 
 ## 4. 已知限制
 
