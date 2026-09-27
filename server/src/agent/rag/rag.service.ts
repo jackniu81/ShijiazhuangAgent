@@ -4,14 +4,14 @@ import { APP_CONFIG, AppConfig } from '../../config/configuration';
 import { LLM_PROVIDER } from '../llm/llm.factory';
 import { LLMProvider } from '../llm/llm.types';
 import { buildIndexFromDir } from './indexer';
-import { RetrievedDoc } from './rag.types';
+import { RetrievedDoc, VectorStore } from './rag.types';
 import { InMemoryVectorStore } from './store';
 
 /** 内存 RAG 服务:启动时建索引,提供向量检索;失败时降级为无检索(issue #8 spec §8)。 */
 @Injectable()
 export class RagService implements OnModuleInit {
   private readonly logger = new Logger(RagService.name);
-  private store: InMemoryVectorStore = new InMemoryVectorStore();
+  private store: VectorStore = new InMemoryVectorStore();
   /** 索引构建/embedding 不可用时为 true,服务仍可提供 LLM 回答,但无本地资料。 */
   private degraded = false;
 
