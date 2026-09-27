@@ -14,7 +14,7 @@
 - **工程化**：`@shijiazhuang-agent/shared` 类型包 #48（消除双份 types）、reducer/gateway/service/nodes 单测 #49-#52、21 篇分类语料 #28 ✅
   （堆叠 PR #53-#57 已经 PR #67 整体合入 main）
 - **测试规模**：server jest 11 suites / 68 tests，client vitest 7 files / 43 tests
-- **生产 blocker 仍缺**：鉴权（R1）、限流（R2）、会话持久（C5）——已立项为 #61 / #62 / #29，归入 MS-005
+- **生产 blocker 仍缺**:会话持久（C5）——#29 进行中;鉴权（R1，#61）与限流（R2，#62）已落地
 
 Backlog 重新编排（2026-09-26）：原 [MS-999](https://github.com/jackniu81/ShijiazhuangAgent/milestone/4) 中近期要做的 issue 已迁入新里程碑——#27/#29/#36 → MS-005，#30/#31/#32 → MS-006；MS-999 仅保留观察项 #33（个性化长期记忆）与 #35（多语言语音）。
 
@@ -109,7 +109,7 @@ Provider 代码已接完（#8），剩下的不是"调通"而是"**验出效果*
 | #58 金标评估集：30-50 个固定问题回归基线 | 新建 | ⬜ 待处理 |
 | #59 plan JSON 输出校验加固与自动重试 | 新建 | ⬜ 待处理 |
 | #60 LLM 降级链与成本延迟档案 | 新建 | ⬜ 待处理 |
-| #61 Socket.IO 连接鉴权（R1） | 新建，上线 blocker | ⬜ 待处理 |
+| #61 Socket.IO 连接鉴权（R1） | 新建，上线 blocker | ✅ 已完成（2026-09-27，`WS_TOKEN` 静态 token + namespace middleware，配置说明见 deploy.md §3.1） |
 | #62 WebSocket 请求限流（R2） | 新建，上线 blocker | ⬜ 待处理 |
 
 ### [MS-006: Differentiation Loop](https://github.com/jackniu81/ShijiazhuangAgent/milestone/6)（差异化闭环，~1 个月）
