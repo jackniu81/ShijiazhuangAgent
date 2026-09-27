@@ -16,6 +16,7 @@ jest.mock('@nestjs/common', () => ({
     error(): void {}
     debug(): void {}
   },
+  Inject: () => () => {},
 }));
 jest.mock('@nestjs/websockets', () => ({
   WebSocketGateway: () => () => {},
@@ -33,7 +34,7 @@ interface CallRecord {
   signal: AbortSignal;
 }
 
-function makeGateway() {
+function makeGateway(rateLimit?: { maxConcurrentPerSession?: number; perWindow?: number; windowMs?: number }) {
   const planCalls: CallRecord[] = [];
   const askCalls: CallRecord[] = [];
   let resolvePlan: () => void = () => {};
@@ -50,13 +51,23 @@ function makeGateway() {
     },
   } as unknown as AgentService;
 
+  const config = {
+    rateLimit: {
+      maxConcurrentPerSession: 1,
+      perWindow: 30,
+      windowMs: 60_000,
+      ...rateLimit,
+    },
+  } as unknown as import('../config/configuration').AppConfig;
+
   const emitted: Array<{ event: string; data: unknown }> = [];
   const client = {
     id: 'sock-1',
+    handshake: { address: '10.0.0.1' },
     emit: (event: string, data: unknown) => emitted.push({ event, data }),
   } as unknown as import('socket.io').Socket;
 
-  const gateway = new AgentGateway(service);
+  const gateway = new AgentGateway(service, config);
   return { gateway, planCalls, askCalls, emitted, client, finishPlan: () => resolvePlan(), finishAsk: () => resolveAsk() };
 }
 
@@ -143,5 +154,65 @@ describe('AgentGateway — 取消与 active 回收', () => {
     await new Promise((r) => setImmediate(r));
     expect(activeMap(gateway).has('c1')).toBe(false);
     expect(activeMap(gateway).has('p1')).toBe(true);
+  });
+});
+
+describe('AgentGateway — 请求限流(issue #62)', () => {
+  it('同一会话并发超阈值 → 第二个请求被拒,回 app:error RATE_LIMITED', () => {
+    const { gateway, planCalls, emitted, client } = makeGateway();
+    gateway.handlePlanCreate(client, { requestId: 'r1', input: { days: 2 } });
+    gateway.handlePlanCreate(client, { requestId: 'r2', input: { days: 2 } });
+
+    expect(planCalls).toHaveLength(1); // 第二个未派发到 service
+    expect(emitted).toEqual([
+      {
+        event: 'app:error',
+        data: { requestId: 'r2', code: 'RATE_LIMITED', message: expect.any(String) },
+      },
+    ]);
+  });
+
+  it('前一请求结束后归还并发额度,后续请求放行', async () => {
+    const { gateway, planCalls, client, finishPlan } = makeGateway();
+    gateway.handlePlanCreate(client, { requestId: 'r1', input: { days: 2 } });
+    finishPlan();
+    await new Promise((r) => setImmediate(r));
+
+    gateway.handlePlanCreate(client, { requestId: 'r2', input: { days: 2 } });
+    expect(planCalls).toHaveLength(2);
+  });
+
+  it('速率超窗口阈值 → 拒绝并回 RATE_LIMITED(perWindow=3)', () => {
+    const { gateway, askCalls, emitted, client } = makeGateway({
+      maxConcurrentPerSession: 100,
+      perWindow: 3,
+    });
+    for (let i = 1; i <= 4; i++) {
+      gateway.handleChatAsk(client, { requestId: `r${i}`, sessionId: 's1', question: 'q' });
+    }
+    expect(askCalls).toHaveLength(3);
+    expect(emitted).toHaveLength(1);
+    expect((emitted[0].data as { code: string; requestId: string }).code).toBe('RATE_LIMITED');
+    expect((emitted[0].data as { requestId: string }).requestId).toBe('r4');
+  });
+
+  it('IP 维度独立生效:同 IP 不同会话共用速率额度(perWindow=2)', () => {
+    const { gateway, askCalls, emitted, client } = makeGateway({
+      maxConcurrentPerSession: 100,
+      perWindow: 2,
+    });
+    gateway.handleChatAsk(client, { requestId: 'a', sessionId: 's1', question: 'q' });
+    gateway.handleChatAsk(client, { requestId: 'b', sessionId: 's2', question: 'q' });
+    gateway.handleChatAsk(client, { requestId: 'c', sessionId: 's3', question: 'q' });
+    expect(askCalls).toHaveLength(2);
+    expect(emitted).toHaveLength(1);
+  });
+
+  it('被拒绝的请求不消耗服务调用,也不进入 active', () => {
+    const { gateway, planCalls, client } = makeGateway();
+    gateway.handlePlanCreate(client, { requestId: 'r1', input: { days: 2 } });
+    gateway.handlePlanCreate(client, { requestId: 'r2', input: { days: 2 } });
+    expect(activeMap(gateway).has('r2')).toBe(false);
+    expect(planCalls[0].isCancelled()).toBe(false);
   });
 });

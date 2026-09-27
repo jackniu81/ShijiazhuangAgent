@@ -121,10 +121,13 @@ interface ChatDoneEvent {
 ```ts
 interface AppErrorEvent {
   requestId?: string;          // 连接级错误时为空
-  code: 'INVALID_INPUT' | 'LLM_ERROR' | 'RAG_ERROR' | 'CANCELLED' | 'INTERNAL';
+  code: 'INVALID_INPUT' | 'LLM_ERROR' | 'RAG_ERROR' | 'CANCELLED' | 'INTERNAL' | 'RATE_LIMITED';
   message: string;             // 可直接展示给用户的中文文案
 }
 ```
+
+> `RATE_LIMITED`(issue #62):请求超过限流阈值(每会话并发数 / 每 IP·会话滑动窗口速率)时返回,
+> 阈值见 `server/.env.example` 的 `WS_MAX_CONCURRENT_PER_SESSION` / `WS_RATE_LIMIT_PER_WINDOW`。
 
 ## 5. 交互时序
 

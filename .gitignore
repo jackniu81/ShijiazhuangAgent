@@ -14,3 +14,5 @@ npm-debug.log*
 .vscode/
 .idea/
 coverage/
+# Qoder CLI 本地会话配置
+.qoder/

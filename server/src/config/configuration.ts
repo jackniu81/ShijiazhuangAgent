@@ -37,6 +37,15 @@ export interface AppConfig {
     /** question 最大长度,超出报 INVALID_INPUT */
     questionMaxLen: number;
   };
+  /** WebSocket 请求限流(issue #62):IP + 会话双维度 */
+  rateLimit: {
+    /** 同一会话允许同时进行的活跃请求数 */
+    maxConcurrentPerSession: number;
+    /** 滑动窗口内每个 IP / 每个会话允许的最大请求数 */
+    perWindow: number;
+    /** 滑动窗口长度(毫秒) */
+    windowMs: number;
+  };
 }
 
 const bool = (v: string | undefined, def: boolean): boolean =>
@@ -79,6 +88,11 @@ export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig 
       historyTurns: int(env.CHAT_HISTORY_TURNS, 6),
       sessionTtlMs: int(env.CHAT_SESSION_TTL_MS, 30 * 60_000),
       questionMaxLen: int(env.CHAT_QUESTION_MAX, 500),
+    },
+    rateLimit: {
+      maxConcurrentPerSession: int(env.WS_MAX_CONCURRENT_PER_SESSION, 1),
+      perWindow: int(env.WS_RATE_LIMIT_PER_WINDOW, 30),
+      windowMs: int(env.WS_RATE_LIMIT_WINDOW_MS, 60_000),
     },
   };
 }
