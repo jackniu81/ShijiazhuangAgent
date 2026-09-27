@@ -1,0 +1,104 @@
+#
+# 石家庄旅游助手 —— 一键编排(issue #36 PR2/3)
+#
+# 服务构成:
+#   app       唯一对外服务。镜像内含 server + client(NestJS 托管 client/dist),
+#             因此没有独立 client 容器,也不需要 nginx 反代;WebSocket 与 REST 同端口。
+#   ollama    可选(profile llm-local):本地模型,免外网 Key。
+#   postgres  可选(profile db):pgvector 载体,**当前代码尚未接入**(向量与会话持久化在 #29),
+#             先随编排落地网络/卷/健康检查,#29 合并后把 app 转为默认依赖即可。
+#
+# 常用命令(均在仓库根执行):
+#   docker compose up -d --build               # 起 app(默认 mock provider,无需任何配置)
+#   cp .env.docker.example .env.docker         # 要接真实 LLM 时填 Key,再用下面命令起
+#   docker compose --env-file .env.docker up -d --build
+#   docker compose --profile llm-local up -d      # 追加本地 Ollama
+#   docker compose --profile db up -d          # 追加 postgres
+#   docker compose ps / logs -f app / down     # 观察与停止
+#
+# 配置只走一个通道:变量统一由 --env-file(.env.docker)注入后插值到各服务的
+# environment;故意不用 env_file: 指令,避免同名变量被本文件默认值反向覆盖。
+#
+# 验收:curl http://localhost:3000/api/version ;浏览器 http://localhost:3000
+
+name: shijiazhuang-agent
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: shijiazhuang-agent:latest
+    container_name: shijiazhuang-agent-app
+    restart: unless-stopped
+    ports:
+      - '${APP_PORT:-3000}:3000'
+    # 以上默认值已覆盖"无配置也能起服务";需真实 LLM 时用 --env-file .env.docker 提供同名变量
+    environment:
+      NODE_ENV: production
+      PORT: '3000'
+      DATA_DIR: /app/data
+      LLM_PROVIDER: ${LLM_PROVIDER:-mock}
+      LLM_TIMEOUT_MS: ${LLM_TIMEOUT_MS:-180000}
+      SILICONFLOW_API_KEY: ${SILICONFLOW_API_KEY:-}
+      SILICONFLOW_CHAT_MODEL: ${SILICONFLOW_CHAT_MODEL:-Qwen/Qwen2.5-7B-Instruct}
+      SILICONFLOW_EMBED_MODEL: ${SILICONFLOW_EMBED_MODEL:-BAAI/bge-m3}
+      # 容器内网络名访问 ollama 服务;未启用 profile 时 RAG 向量路会自动降级
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      OLLAMA_CHAT_MODEL: ${OLLAMA_CHAT_MODEL:-qwen2.5:7b}
+      OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-bge-m3}
+      RAG_HYBRID: ${RAG_HYBRID:-1}
+      RAG_TOPK: ${RAG_TOPK:-5}
+      CHAT_HISTORY_TURNS: ${CHAT_HISTORY_TURNS:-6}
+      CHAT_SESSION_TTL_MS: ${CHAT_SESSION_TTL_MS:-1800000}
+      CHAT_QUESTION_MAX: ${CHAT_QUESTION_MAX:-500}
+    volumes:
+      # 语料以只读方式挂载:换语料不必重建镜像
+      - ./data:/app/data:ro
+    # healthcheck 已在 Dockerfile 内声明(打 /api/version),此处复用
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '5'
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: shijiazhuang-agent-ollama
+    profiles: ['llm-local']
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:11434:11434'
+    volumes:
+      - ollama-models:/root/.ollama
+    environment:
+      OLLAMA_KEEP_ALIVE: '${OLLAMA_KEEP_ALIVE:-24h}'
+    # 首次需拉模型(会话内执行一次即可,模型缓存在命名卷里):
+    #   docker compose exec ollama ollama pull qwen2.5:7b
+    #   docker compose exec ollama ollama pull bge-m3
+
+  postgres:
+    image: pgvector/pgvector:pg18
+    container_name: shijiazhuang-agent-pg
+    profiles: ['db']
+    restart: unless-stopped
+    ports:
+      - '127.0.0.1:${PG_PORT:-5432}:5432'
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-agent}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-agent}
+      POSTGRES_DB: ${POSTGRES_DB:-shijiazhuang}
+    volumes:
+      # pg18+ 官方镜像约定:挂载点为 /var/lib/postgresql(数据在其版本子目录内),
+      # 沿旧写法挂 /var/lib/postgresql/data 会启动失败并反复重启
+      - pgdata:/var/lib/postgresql
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U ${POSTGRES_USER:-agent} -d ${POSTGRES_DB:-shijiazhuang}']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    # #29 落地后 app 需追加:DATABASE_URL=postgres://...@postgres:5432/... 与 depends_on: postgres(condition: service_healthy)
+
+volumes:
+  ollama-models:
+  pgdata:
