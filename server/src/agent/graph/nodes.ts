@@ -81,6 +81,19 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+/**
+ * 发生过降级时返回实际承接的厂商名(issue #60),供界面标注"这次是谁答的";
+ * 未降级(含单 provider 部署)返回 undefined。须在模型调用之后读取。
+ */
+function servedBy(deps: GraphDeps): string | undefined {
+  const served = deps.llm.activeProvider?.();
+  return served && served !== deps.llm.name ? served : undefined;
+}
+
+function fallbackNote(deps: GraphDeps): string {
+  return `主模型 ${deps.llm.name} 暂不可用,本次由 ${servedBy(deps)} 兜底回答。`;
+}
+
 // ────────────────────────────────────────────────────────────
 // 节点工厂(闭包捕获 deps,节点签名仍兼容 LangGraph)
 // ────────────────────────────────────────────────────────────
@@ -109,6 +122,10 @@ export const nodes = {
         } else {
           const raw = await deps.llm.chat(buildPlanMessages(state.input, state.docs));
           rawPlan = parsePlanJson(raw, state.input.days);
+          // 降级到备选模型(含 mock 模板行程)时,在 tips 里留一句人话说明
+          if (servedBy(deps)) {
+            rawPlan = { ...rawPlan, tips: [...(rawPlan.tips ?? []), fallbackNote(deps)] };
+          }
         }
         // 逐天流式 emit:plan:day 让前端提前看到部分行程
         await emitPlanDays(deps, rawPlan);
@@ -165,6 +182,10 @@ export const nodes = {
       // RAG 降级时在完整 answer 中注明(流式 token 已过,前端以 chat:done.answer 为准)
       if (!state.docs.length && deps.ragDegraded) {
         answer += '\n(注:本地资料检索暂不可用,以上回答基于模型常识)';
+      }
+      // LLM 降级链同理:换人承接要在最终 answer 里说清楚
+      if (servedBy(deps)) {
+        answer += `\n(注:${fallbackNote(deps)})`;
       }
       guardCancel(deps);
       deps.emit(AgentEvents.CHAT_DONE, {

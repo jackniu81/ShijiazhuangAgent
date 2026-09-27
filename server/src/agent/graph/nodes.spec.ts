@@ -180,3 +180,59 @@ describe('nodes.plan 流式 emitPlanDays', () => {
     expect((errs[0].data as AppErrorEvent).code).toBe('CANCELLED');
   });
 });
+
+// ────────────────────────────────────────────────────────────
+// 降级链可感知提示:实际承接厂商 ≠ 选型时,回答/行程要标注(issue #60)
+// ────────────────────────────────────────────────────────────
+
+/** 在 makeDeps 基础上改写 llm:name=选型厂商,activeProvider=真实承接方。 */
+function withServed(d: any, served: string | undefined, chat?: () => Promise<string>): any {
+  d.llm = {
+    ...d.llm,
+    name: 'siliconflow',
+    activeProvider: () => served,
+    ...(chat ? { chat } : {}),
+  };
+  return d;
+}
+
+const planJson = JSON.stringify({
+  title: '石家庄 1 日游',
+  days: [{ day: 1, items: [{ time: '09:00', title: '河北博物院', place: '市区', description: '上午首站。' }] }],
+  summary: '一日人文线。',
+  tips: ['记得预约'],
+});
+
+describe('nodes 降级可感知提示 (#60)', () => {
+  it('问答:降级到备选承接 → chat:done.answer 末尾注明兜底厂商', async () => {
+    const d = withServed(makeDeps({ isCancelled: () => false, signal: new AbortController().signal }), 'ollama');
+    const res = await nodes.generate(d)(state);
+    expect(res.answer).toContain('主模型 siliconflow 暂不可用,本次由 ollama 兜底回答。');
+  });
+
+  it('问答:未降级(activeProvider 等于选型)→ 不加提示', async () => {
+    const d = withServed(makeDeps({ isCancelled: () => false, signal: new AbortController().signal }), 'siliconflow');
+    const res = await nodes.generate(d)(state);
+    expect(res.answer).not.toContain('兜底回答');
+  });
+
+  it('问答:单 provider 无 activeProvider 方法 → 正常回答不报错', async () => {
+    const d = makeDeps({ isCancelled: () => false, signal: new AbortController().signal }) as any;
+    const res = await nodes.generate(d)(state);
+    expect(res.answer).toContain('第一段');
+  });
+
+  it('行程:降级到 mock 模板 → tips 追加兜底说明,原 tips 保留', async () => {
+    const d = withServed(makeDeps({ isCancelled: () => false, signal: new AbortController().signal }), 'mock', async () => planJson);
+    const res = await nodes.plan(d)(makePlanState(1));
+    const tips: string[] = ((res as any).plan as { tips?: string[] }).tips ?? [];
+    expect(tips).toContain('记得预约');
+    expect(tips.join('')).toContain('本次由 mock 兜底回答');
+  });
+
+  it('行程:未降级 → tips 原样', async () => {
+    const d = withServed(makeDeps({ isCancelled: () => false, signal: new AbortController().signal }), 'siliconflow', async () => planJson);
+    const res = await nodes.plan(d)(makePlanState(1));
+    expect(((res as any).plan as { tips?: string[] }).tips).toEqual(['记得预约']);
+  });
+});
