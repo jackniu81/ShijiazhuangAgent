@@ -54,7 +54,13 @@ function makeConfig(over: Partial<AppConfig['llm']> & Partial<AppConfig['chat']>
       vectorDim: 1024,
       vectorTable: 'rag_chunks',
     },
-    chat: { historyTurns: 6, sessionTtlMs: 30 * 60_000, questionMaxLen: over.questionMaxLen ?? 500 },
+    chat: {
+      historyTurns: 6,
+      sessionTtlMs: 30 * 60_000,
+      questionMaxLen: over.questionMaxLen ?? 500,
+      persistence: 'memory',
+      databaseUrl: '',
+    },
   };
 }
 
@@ -166,7 +172,7 @@ describe('AgentService — answerQuestion', () => {
     const h = harness();
     await h.service.answerQuestion({ requestId: 'r1', sessionId: 'sess-1', question: '正定有什么吃的' }, h.emit, NO_CANCEL, new AbortController().signal);
     expect(runChatGraph).toHaveBeenCalled();
-    const history = h.sessions.getHistory('sess-1');
+    const history = await h.sessions.getHistory('sess-1');
     expect(history).toHaveLength(2);
     expect(history[0]).toEqual({ role: 'user', content: '正定有什么吃的' });
     expect(history[1]).toEqual({ role: 'assistant', content: '推荐正定八大碗' });
@@ -178,7 +184,7 @@ describe('AgentService — answerQuestion', () => {
     await h.service.answerQuestion({ requestId: 'r1', sessionId: 's', question: '你好' }, h.emit, NO_CANCEL, new AbortController().signal);
     const err = h.emits.find((e) => e.event === AgentEvents.APP_ERROR)?.data as AppErrorEvent;
     expect(err.code).toBe('LLM_ERROR');
-    expect(h.sessions.getHistory('s')).toEqual([]);
+    await expect(h.sessions.getHistory('s')).resolves.toEqual([]);
   });
 
   it('超时兜底:图不 resolve 时 timeoutMs 到点后 abort 传入图的 signal 并发 LLM_ERROR', async () => {

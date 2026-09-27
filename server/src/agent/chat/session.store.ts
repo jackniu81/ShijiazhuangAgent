@@ -3,6 +3,18 @@ import type { Msg } from '../llm/llm.types';
 /** 供 NestJS 依赖注入使用的会话存储 token。 */
 export const SESSION_STORE = Symbol('SESSION_STORE');
 
+/**
+ * 会话仓储消费侧契约(issue #29 三阶段)。
+ * AgentService 仅依赖此接口,内存实现与 Postgres 持久化实现可开关替换。
+ * 采用 async 签名:持久化实现需数据库 IO,内存实现直接 Promise 包装即可。
+ */
+export interface SessionRepository {
+  /** 返回该会话最近 maxTurns 轮的消息副本;未知 sessionId 返回空数组。 */
+  getHistory(sessionId: string): Promise<Msg[]>;
+  /** 追加一轮问答并截断到最近 N 轮;answer 为空时跳过写入。 */
+  appendTurn(sessionId: string, question: string, answer: string): Promise<void>;
+}
+
 export interface SessionStoreOptions {
   /** 保留的最大轮数,1 轮 = user + assistant 各一条(spec §7 CHAT_HISTORY_TURNS) */
   maxTurns: number;
@@ -19,9 +31,9 @@ interface SessionEntry {
 
 /**
  * 内存多轮会话历史:按 sessionId 存储,读取/写入时刷新活跃时间,
- * 闲置超过 TTL 由定期清扫与写入时机惰性回收。后续可替换为持久化实现,接口不变。
+ * 闲置超过 TTL 由定期清扫与写入时机惰性回收。持久化实现见 PostgresSessionStore(issue #29)。
  */
-export class SessionStore {
+export class SessionStore implements SessionRepository {
   private readonly sessions = new Map<string, SessionEntry>();
   private readonly maxMessages: number;
   private readonly ttlMs: number;
@@ -36,13 +48,13 @@ export class SessionStore {
   }
 
   /** 返回该会话最近 maxMessages 条消息的副本;未知 sessionId 返回空数组。 */
-  getHistory(sessionId: string): Msg[] {
+  async getHistory(sessionId: string): Promise<Msg[]> {
     const entry = this.sessions.get(sessionId);
     return entry ? [...entry.msgs] : [];
   }
 
   /** 追加一轮问答并截断到最近 N 轮;answer 为空时跳过写入。 */
-  appendTurn(sessionId: string, question: string, answer: string): void {
+  async appendTurn(sessionId: string, question: string, answer: string): Promise<void> {
     if (!sessionId || !answer) return;
     this.pruneExpired();
     const entry = this.sessions.get(sessionId) ?? { msgs: [], lastActive: Date.now() };

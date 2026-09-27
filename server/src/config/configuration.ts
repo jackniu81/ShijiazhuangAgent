@@ -8,6 +8,9 @@ export type LlmProviderName = 'mock' | 'siliconflow' | 'ollama';
 /** RAG 向量存储后端(issue #29):内存 or pgvector 持久化。 */
 export type RagBackend = 'memory' | 'pgvector';
 
+/** 会话存储后端(issue #29 三阶段):内存 or Postgres 持久化。 */
+export type ChatPersistence = 'memory' | 'postgres';
+
 /** 集中式、带默认值与类型转换的应用配置。 */
 export interface AppConfig {
   llm: {
@@ -47,6 +50,10 @@ export interface AppConfig {
     sessionTtlMs: number;
     /** question 最大长度,超出报 INVALID_INPUT */
     questionMaxLen: number;
+    /** 会话存储后端:memory(默认) | postgres(issue #29 三阶段) */
+    persistence: ChatPersistence;
+    /** postgres 后端连接串(DATABASE_URL),persistence=postgres 时必填 */
+    databaseUrl: string;
   };
 }
 
@@ -62,6 +69,9 @@ const provider = (v: string | undefined): LlmProviderName =>
   v === 'siliconflow' || v === 'ollama' ? v : 'mock';
 
 const ragBackend = (v: string | undefined): RagBackend => (v === 'pgvector' ? 'pgvector' : 'memory');
+
+const chatPersistence = (v: string | undefined): ChatPersistence =>
+  v === 'postgres' ? 'postgres' : 'memory';
 
 export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
@@ -96,6 +106,8 @@ export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig 
       historyTurns: int(env.CHAT_HISTORY_TURNS, 6),
       sessionTtlMs: int(env.CHAT_SESSION_TTL_MS, 30 * 60_000),
       questionMaxLen: int(env.CHAT_QUESTION_MAX, 500),
+      persistence: chatPersistence(env.CHAT_STORE_BACKEND),
+      databaseUrl: env.DATABASE_URL ?? '',
     },
   };
 }

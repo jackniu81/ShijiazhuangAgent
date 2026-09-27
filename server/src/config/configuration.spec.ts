@@ -48,4 +48,17 @@ describe('buildAppConfig 默认值与开关(issue #9 相关)', () => {
     // 非法维度数值回退默认 1024
     expect(buildAppConfig({ RAG_VECTOR_DIM: 'abc' }).rag.vectorDim).toBe(1024);
   });
+
+  it('issue #29 会话持久化默认 memory,postgres 需显式开关', () => {
+    const def = buildAppConfig({});
+    expect(def.chat.persistence).toBe('memory');
+    expect(def.chat.databaseUrl).toBe('');
+
+    const pg = buildAppConfig({ CHAT_STORE_BACKEND: 'postgres', DATABASE_URL: 'postgres://x' });
+    expect(pg.chat.persistence).toBe('postgres');
+    expect(pg.chat.databaseUrl).toBe('postgres://x');
+
+    // 非法值回退 memory
+    expect(buildAppConfig({ CHAT_STORE_BACKEND: 'redis' }).chat.persistence).toBe('memory');
+  });
 });

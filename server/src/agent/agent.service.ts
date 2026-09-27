@@ -9,7 +9,7 @@ import { CancelledSignal } from './graph/graph.types';
 import { GraphDeps } from './graph/graph.types';
 import { runChatGraph } from './graph/chat.graph';
 import { runPlanGraph } from './graph/plan.graph';
-import { SESSION_STORE, SessionStore } from './chat/session.store';
+import { SESSION_STORE, SessionRepository } from './chat/session.store';
 import { LLMError } from './llm/http';
 import { LLM_PROVIDER } from './llm/llm.factory';
 import { LLMProvider } from './llm/llm.types';
@@ -33,7 +33,7 @@ export class AgentService {
   constructor(
     @Inject(LLM_PROVIDER) private readonly llm: LLMProvider,
     @Inject(APP_CONFIG) private readonly config: AppConfig,
-    @Inject(SESSION_STORE) private readonly sessions: SessionStore,
+    @Inject(SESSION_STORE) private readonly sessions: SessionRepository,
     private readonly rag: RagService,
   ) {}
 
@@ -84,13 +84,13 @@ export class AgentService {
 
     const ctrl = new AbortController();
     const deps = this.buildDeps(requestId, emit, isCancelled, ctrl, externalSignal);
-    const history = this.sessions.getHistory(sessionId);
+    const history = await this.sessions.getHistory(sessionId);
     try {
       const answer = await this.withTimeout(
         runChatGraph(deps, { question: trimmed, sessionId, history }),
         ctrl,
       );
-      if (answer) this.sessions.appendTurn(sessionId, trimmed, answer);
+      if (answer) await this.sessions.appendTurn(sessionId, trimmed, answer);
     } catch (err) {
       this.handleError(err, emit, requestId, isCancelled, '回答问题时出现错误,请稍后重试。');
     }

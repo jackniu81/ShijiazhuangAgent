@@ -5,8 +5,9 @@
 #   app       唯一对外服务。镜像内含 server + client(NestJS 托管 client/dist),
 #             因此没有独立 client 容器,也不需要 nginx 反代;WebSocket 与 REST 同端口。
 #   ollama    可选(profile llm-local):本地模型,免外网 Key。
-#   postgres  可选(profile db):pgvector 载体,**当前代码尚未接入**(向量与会话持久化在 #29),
-#             先随编排落地网络/卷/健康检查,#29 合并后把 app 转为默认依赖即可。
+#   postgres  可选(profile db):pgvector 向量库 + 会话历史载体(#29 已接入代码)。
+#             默认后端仍 memory;启用持久化用:`docker compose --profile db --env-file .env.docker up -d`,
+#             并在 .env.docker 里设 RAG_STORE_BACKEND=pgvector、CHAT_STORE_BACKEND=postgres、DATABASE_URL。
 #
 # 常用命令(均在仓库根执行):
 #   docker compose up -d --build               # 起 app(默认 mock provider,无需任何配置)
@@ -49,6 +50,12 @@ services:
       OLLAMA_EMBED_MODEL: ${OLLAMA_EMBED_MODEL:-bge-m3}
       RAG_HYBRID: ${RAG_HYBRID:-1}
       RAG_TOPK: ${RAG_TOPK:-5}
+      # 持久化(issue #29):默认 memory,无需数据库即可起服务;设 backend + DATABASE_URL 切 pgvector/postgres
+      RAG_STORE_BACKEND: ${RAG_STORE_BACKEND:-memory}
+      RAG_VECTOR_DIM: ${RAG_VECTOR_DIM:-1024}
+      RAG_VECTOR_TABLE: ${RAG_VECTOR_TABLE:-rag_chunks}
+      CHAT_STORE_BACKEND: ${CHAT_STORE_BACKEND:-memory}
+      DATABASE_URL: ${DATABASE_URL:-}
       CHAT_HISTORY_TURNS: ${CHAT_HISTORY_TURNS:-6}
       CHAT_SESSION_TTL_MS: ${CHAT_SESSION_TTL_MS:-1800000}
       CHAT_QUESTION_MAX: ${CHAT_QUESTION_MAX:-500}
@@ -97,7 +104,10 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    # #29 落地后 app 需追加:DATABASE_URL=postgres://...@postgres:5432/... 与 depends_on: postgres(condition: service_healthy)
+    # 启用持久化(profile db)时,app 需连本服务:在 --env-file 提供
+    #   DATABASE_URL=postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
+    #   RAG_STORE_BACKEND=pgvector / CHAT_STORE_BACKEND=postgres
+    # 并给 app 追加 depends_on: postgres(profile 未启用时不能声明硬依赖,否则默认 up 会失败)
 
 volumes:
   ollama-models:

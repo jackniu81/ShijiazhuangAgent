@@ -14,57 +14,57 @@ function makeStore(over: Partial<ConstructorParameters<typeof SessionStore>[0]> 
 }
 
 describe('SessionStore — 读写与轮数截断', () => {
-  it('未知 sessionId 返回空数组', () => {
+  it('未知 sessionId 返回空数组', async () => {
     const s = makeStore();
-    expect(s.getHistory('nope')).toEqual([]);
+    await expect(s.getHistory('nope')).resolves.toEqual([]);
     s.dispose();
   });
 
-  it('appendTurn 后 getHistory 返回 user+assistant 两条副本', () => {
+  it('appendTurn 后 getHistory 返回 user+assistant 两条副本', async () => {
     const s = makeStore();
-    s.appendTurn('c1', '问', '答');
-    const h = s.getHistory('c1');
+    await s.appendTurn('c1', '问', '答');
+    const h = await s.getHistory('c1');
     expect(h).toEqual([
       { role: 'user', content: '问' },
       { role: 'assistant', content: '答' },
     ]);
     // 返回副本,外部修改不影响内部
     h.push({ role: 'user', content: '注入' });
-    expect(s.getHistory('c1')).toHaveLength(2);
+    await expect(s.getHistory('c1')).resolves.toHaveLength(2);
     s.dispose();
   });
 
-  it('超过 maxTurns 的旧轮被从头截断,只保留最近 N 轮', () => {
+  it('超过 maxTurns 的旧轮被从头截断,只保留最近 N 轮', async () => {
     const s = makeStore({ maxTurns: 2 });
-    s.appendTurn('c1', 'q1', 'a1');
-    s.appendTurn('c1', 'q2', 'a2');
-    s.appendTurn('c1', 'q3', 'a3'); // 触发截断
-    const h = s.getHistory('c1');
+    await s.appendTurn('c1', 'q1', 'a1');
+    await s.appendTurn('c1', 'q2', 'a2');
+    await s.appendTurn('c1', 'q3', 'a3'); // 触发截断
+    const h = await s.getHistory('c1');
     expect(h).toHaveLength(4); // 2 轮 = 4 条
     expect(h.map((m) => m.content)).toEqual(['q2', 'a2', 'q3', 'a3']);
     s.dispose();
   });
 
-  it('answer 为空 → 跳过写入(不产生半成品轮次)', () => {
+  it('answer 为空 → 跳过写入(不产生半成品轮次)', async () => {
     const s = makeStore();
-    s.appendTurn('c1', '问', '');
-    expect(s.getHistory('c1')).toEqual([]);
+    await s.appendTurn('c1', '问', '');
+    await expect(s.getHistory('c1')).resolves.toEqual([]);
     expect(s.size).toBe(0);
     s.dispose();
   });
 
-  it('sessionId 为空 → 忽略', () => {
+  it('sessionId 为空 → 忽略', async () => {
     const s = makeStore();
-    s.appendTurn('', 'q', 'a');
+    await s.appendTurn('', 'q', 'a');
     expect(s.size).toBe(0);
     s.dispose();
   });
 });
 
 describe('SessionStore — TTL 回收', () => {
-  it('闲置超过 ttlMs 的会话被 pruneExpired 清除', () => {
+  it('闲置超过 ttlMs 的会话被 pruneExpired 清除', async () => {
     const s = makeStore({ ttlMs: 1000 });
-    s.appendTurn('c1', 'q', 'a');
+    await s.appendTurn('c1', 'q', 'a');
     expect(s.size).toBe(1);
 
     // 未到期的 now:保留
@@ -77,16 +77,16 @@ describe('SessionStore — TTL 回收', () => {
     s.dispose();
   });
 
-  it('appendTurn 写入前会顺带惰性回收过期会话', () => {
+  it('appendTurn 写入前会顺带惰性回收过期会话', async () => {
     const s = makeStore({ ttlMs: 1000 });
-    s.appendTurn('stale', 'q', 'a');
+    await s.appendTurn('stale', 'q', 'a');
     // 手动把 stale 的活跃时间推到过去
     const entry = (s as unknown as { sessions: Map<string, { lastActive: number }> }).sessions.get('stale')!;
     entry.lastActive = Date.now() - 5000;
     // 写入新会话触发内部 pruneExpired()
-    s.appendTurn('fresh', 'q', 'a');
-    expect(s.getHistory('stale')).toEqual([]);
-    expect(s.getHistory('fresh')).toHaveLength(2);
+    await s.appendTurn('fresh', 'q', 'a');
+    await expect(s.getHistory('stale')).resolves.toEqual([]);
+    await expect(s.getHistory('fresh')).resolves.toHaveLength(2);
     s.dispose();
   });
 });
