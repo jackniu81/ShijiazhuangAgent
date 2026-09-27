@@ -58,7 +58,7 @@ export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig 
       siliconflow: {
         apiKey: env.SILICONFLOW_API_KEY ?? '',
         baseUrl: env.SILICONFLOW_BASE_URL ?? 'https://api.siliconflow.cn/v1',
-        chatModel: env.SILICONFLOW_CHAT_MODEL ?? 'Qwen/Qwen2.5-7B-Instruct',
+        chatModel: env.SILICONFLOW_CHAT_MODEL ?? 'THUDM/GLM-4-9B-0414',
         embedModel: env.SILICONFLOW_EMBED_MODEL ?? 'BAAI/bge-m3',
       },
       ollama: {
