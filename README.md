@@ -89,6 +89,7 @@ data/                          # 共 21 篇
 | 文件 | 说明 |
 |------|------|
 | [docs/api-spec.md](docs/api-spec.md) | WebSocket API 规范（Server / Client 契约） |
+| [docs/llm-providers.md](docs/llm-providers.md) | LLM Provider 切换 / 环境变量 / 回退降级策略 / 端到端验收记录 |
 | [docs/roadmap.md](docs/roadmap.md) | **今后发展规划**：pgvector 选型 / 真实 LLM / 差异化策略 / 里程碑 MS-005、MS-006 |
 | [require.md](require.md) | 原始需求 |
 
