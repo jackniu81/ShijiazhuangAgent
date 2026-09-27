@@ -22,6 +22,7 @@ jest.mock('@nestjs/websockets', () => ({
   WebSocketGateway: () => () => {},
   WebSocketServer: () => () => {},
   SubscribeMessage: () => () => {},
+  OnGatewayInit: () => {},
   OnGatewayConnection: () => {},
   OnGatewayDisconnect: () => {},
 }));
@@ -58,6 +59,7 @@ function makeGateway(rateLimit?: { maxConcurrentPerSession?: number; perWindow?:
       windowMs: 60_000,
       ...rateLimit,
     },
+    wsAuth: { token: '' },
   } as unknown as import('../config/configuration').AppConfig;
 
   const emitted: Array<{ event: string; data: unknown }> = [];
@@ -214,5 +216,66 @@ describe('AgentGateway — 请求限流(issue #62)', () => {
     gateway.handlePlanCreate(client, { requestId: 'r2', input: { days: 2 } });
     expect(activeMap(gateway).has('r2')).toBe(false);
     expect(planCalls[0].isCancelled()).toBe(false);
+  });
+});
+
+describe('AgentGateway — 连接鉴权(issue #61)', () => {
+  /** 构造带 token 的 gateway,伪造 afterInit 入参对象以捕获挂接的 middleware。 */
+  function makeAuthed(token: string, mode: 'namespace' | 'server' = 'namespace') {
+    const middlewares: Array<(socket: unknown, next: (err?: unknown) => void) => void> = [];
+    const ns = { use: (mw: (typeof middlewares)[number]) => middlewares.push(mw) };
+    const gateway = new AgentGateway(
+      { generatePlan: async () => {}, answerQuestion: async () => {} } as unknown as AgentService,
+      {
+        rateLimit: { maxConcurrentPerSession: 1, perWindow: 30, windowMs: 60_000 },
+        wsAuth: { token },
+      } as unknown as import('../config/configuration').AppConfig,
+    );
+    // Nest 对带 namespace 的 gateway 传入的是 Namespace 实例(无 of);源头 Server 则带 of
+    const injected = mode === 'server' ? { of: (name: string) => (name === '/agent' ? ns : undefined) } : ns;
+    gateway.afterInit(injected);
+    const handshake = (auth: unknown) =>
+      ({ handshake: { auth, address: '10.0.0.1' } }) as unknown as import('socket.io').Socket;
+    return { gateway, middlewares, handshake };
+  }
+
+  const nextResult = (mw: (s: unknown, n: (e?: unknown) => void) => void, socket: unknown) =>
+    new Promise<{ err?: unknown }>((resolve) => mw(socket, (err) => resolve({ err })));
+
+  it('配置 token → afterInit 挂接 middleware;有效 token 放行', async () => {
+    const { middlewares, handshake } = makeAuthed('secret');
+    expect(middlewares).toHaveLength(1);
+    const { err } = await nextResult(middlewares[0], handshake({ token: 'secret' }));
+    expect(err).toBeUndefined();
+  });
+
+  it('afterInit 收到源头 Server(带 of) → 同样挂接到 /agent', async () => {
+    const { middlewares, handshake } = makeAuthed('secret', 'server');
+    expect(middlewares).toHaveLength(1);
+    const { err } = await nextResult(middlewares[0], handshake({ token: 'secret' }));
+    expect(err).toBeUndefined();
+  });
+
+  it('token 缺失 / 非字符串 / 不匹配 → 以 UNAUTHORIZED 拒绝', async () => {
+    const { middlewares, handshake } = makeAuthed('secret');
+    for (const auth of [undefined, {}, { token: 42 }, { token: 'wrong' }, { token: '' }]) {
+      const { err } = await nextResult(middlewares[0], handshake(auth));
+      expect(err).toBeInstanceOf(Error);
+      expect((err as { code?: string }).code).toBe('UNAUTHORIZED');
+    }
+  });
+
+  it('WS_TOKEN 为空(开发默认) → 不挂接 middleware,连接不受鉴权约束', () => {
+    const { middlewares } = makeAuthed('');
+    expect(middlewares).toHaveLength(0);
+  });
+
+  it('afterInit 入参不可用(空/Namespace 缺 of) → 安全跳过,不抛异常', () => {
+    const gateway = new AgentGateway(
+      {} as unknown as AgentService,
+      { rateLimit: {}, wsAuth: { token: 'secret' } } as unknown as import('../config/configuration').AppConfig,
+    );
+    expect(() => gateway.afterInit(undefined)).not.toThrow();
+    expect(() => gateway.afterInit({ of: () => undefined })).not.toThrow();
   });
 });

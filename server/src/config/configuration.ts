@@ -57,6 +57,11 @@ export interface AppConfig {
     /** 滑动窗口长度(毫秒) */
     windowMs: number;
   };
+  /** WebSocket 连接鉴权(issue #61):静态 Bearer token */
+  wsAuth: {
+    /** WS_TOKEN 环境变量;空 = 不鉴权(开发默认),生产必须设置 */
+    token: string;
+  };
 }
 
 const bool = (v: string | undefined, def: boolean): boolean =>
@@ -110,6 +115,9 @@ export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig 
       maxConcurrentPerSession: int(env.WS_MAX_CONCURRENT_PER_SESSION, 1),
       perWindow: int(env.WS_RATE_LIMIT_PER_WINDOW, 30),
       windowMs: int(env.WS_RATE_LIMIT_WINDOW_MS, 60_000),
+    },
+    wsAuth: {
+      token: env.WS_TOKEN ?? '',
     },
   };
 }
