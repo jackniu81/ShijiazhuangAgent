@@ -64,6 +64,30 @@ export interface PlanCase {
 
 export type EvalCase = ChatCase | PlanCase;
 
+/** 单题实跑结果(PR2 runner 产出,PR3 基线/对比消费)。 */
+export interface CaseOutcome {
+  id: string;
+  kind: EvalCase['kind'];
+  category: string;
+  question: string;
+  pass: boolean;
+  reasons: string[];
+  latencyMs: number;
+}
+
+/** 一轮完整评估报告;基线文件即此结构快照(server/src/eval/baseline/*.json)。 */
+export interface EvalReport {
+  generatedAt: string;
+  url: string;
+  /** 跑分时生效的 provider,便于区分基线来源 */
+  provider?: string;
+  datasetVersion: number;
+  total: number;
+  pass: number;
+  byCategory: Record<string, { total: number; pass: number }>;
+  outcomes: CaseOutcome[];
+}
+
 export interface EvalDataset {
   version: number;
   /** 语料快照说明,提醒维护者题目与 data/ 联动 */

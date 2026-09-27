@@ -1,0 +1,538 @@
+{
+  "generatedAt": "2026-09-27T01:36:06.761Z",
+  "url": "http://localhost:3000/agent",
+  "datasetVersion": 1,
+  "total": 46,
+  "pass": 10,
+  "byCategory": {
+    "ticket": {
+      "total": 6,
+      "pass": 0
+    },
+    "hours": {
+      "total": 4,
+      "pass": 0
+    },
+    "transport": {
+      "total": 6,
+      "pass": 1
+    },
+    "food": {
+      "total": 7,
+      "pass": 1
+    },
+    "sight": {
+      "total": 9,
+      "pass": 2
+    },
+    "specialty": {
+      "total": 3,
+      "pass": 0
+    },
+    "advice": {
+      "total": 8,
+      "pass": 5
+    },
+    "robustness": {
+      "total": 3,
+      "pass": 1
+    }
+  },
+  "outcomes": [
+    {
+      "id": "T01",
+      "kind": "chat",
+      "category": "ticket",
+      "question": "荣国府的门票多少钱?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「40」"
+      ],
+      "latencyMs": 2774
+    },
+    {
+      "id": "T02",
+      "kind": "chat",
+      "category": "ticket",
+      "question": "西柏坡景区门票贵吗?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「免费」"
+      ],
+      "latencyMs": 2798
+    },
+    {
+      "id": "T03",
+      "kind": "chat",
+      "category": "ticket",
+      "question": "抱犊寨门票多少钱?什么时候去有优惠?",
+      "pass": false,
+      "reasons": [
+        "缺关键词「65」",
+        "未命中任一关键词「下午 3 点/下午3点/半价」"
+      ],
+      "latencyMs": 2748
+    },
+    {
+      "id": "T04",
+      "kind": "chat",
+      "category": "ticket",
+      "question": "天桂山的索道怎么收费?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「40」"
+      ],
+      "latencyMs": 2764
+    },
+    {
+      "id": "T05",
+      "kind": "chat",
+      "category": "ticket",
+      "question": "石家庄地铁票价怎么算?",
+      "pass": false,
+      "reasons": [
+        "缺关键词「起步」",
+        "未命中任一关键词「2 元/2元」"
+      ],
+      "latencyMs": 2749
+    },
+    {
+      "id": "T06",
+      "kind": "chat",
+      "category": "ticket",
+      "question": "河北交通卡多少钱一张,坐地铁有折扣吗?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「20」"
+      ],
+      "latencyMs": 2747
+    },
+    {
+      "id": "H01",
+      "kind": "chat",
+      "category": "hours",
+      "question": "荣国府几点闭馆?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「17:30」"
+      ],
+      "latencyMs": 2748
+    },
+    {
+      "id": "H02",
+      "kind": "chat",
+      "category": "hours",
+      "question": "博物馆类的场馆哪天通常闭馆?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「周一」"
+      ],
+      "latencyMs": 2714
+    },
+    {
+      "id": "H03",
+      "kind": "chat",
+      "category": "hours",
+      "question": "荣国府有免费讲解吗,几点开始?",
+      "pass": false,
+      "reasons": [
+        "缺关键词「10:00」",
+        "缺关键词「14:00」"
+      ],
+      "latencyMs": 2781
+    },
+    {
+      "id": "H04",
+      "kind": "chat",
+      "category": "hours",
+      "question": "石家庄的夜班车几点运营?",
+      "pass": false,
+      "reasons": [
+        "缺关键词「22:00」",
+        "未命中任一关键词「1:00/凌晨/次日」"
+      ],
+      "latencyMs": 2730
+    },
+    {
+      "id": "R01",
+      "kind": "chat",
+      "category": "transport",
+      "question": "坐地铁能到河北博物院吗,几号线?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「1 号线/1号线/蓝线」"
+      ],
+      "latencyMs": 2781
+    },
+    {
+      "id": "R02",
+      "kind": "chat",
+      "category": "transport",
+      "question": "去抱犊寨有旅游公交专线吗?",
+      "pass": true,
+      "reasons": [],
+      "latencyMs": 2749
+    },
+    {
+      "id": "R03",
+      "kind": "chat",
+      "category": "transport",
+      "question": "正定古城离市区远吗,车程多久?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「30」"
+      ],
+      "latencyMs": 2782
+    },
+    {
+      "id": "R04",
+      "kind": "chat",
+      "category": "transport",
+      "question": "赵州桥距离石家庄市区多少公里?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「45」",
+        "RAG 来源未命中任一「attractions/赵州桥.md」(实际:routes/市区古城两日游.md, hotel/市区推荐酒店.md, food/石家庄缸炉烧饼.md, food/金凤扒鸡.md, transport/石家庄地铁与公交.md})"
+      ],
+      "latencyMs": 2748
+    },
+    {
+      "id": "R05",
+      "kind": "chat",
+      "category": "transport",
+      "question": "去荣国府坐哪路公交可以直达?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「177」"
+      ],
+      "latencyMs": 2748
+    },
+    {
+      "id": "R06",
+      "kind": "chat",
+      "category": "transport",
+      "question": "嶂石岩远不远,怎么去合适?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「130/自驾/跟团」"
+      ],
+      "latencyMs": 2748
+    },
+    {
+      "id": "F01",
+      "kind": "chat",
+      "category": "food",
+      "question": "牛肉板面是石家庄本地起源的吗?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「安徽/太和」"
+      ],
+      "latencyMs": 2714
+    },
+    {
+      "id": "F02",
+      "kind": "chat",
+      "category": "food",
+      "question": "正定八大碗的四大碗是哪几样?",
+      "pass": false,
+      "reasons": [
+        "缺关键词「扣肉」",
+        "缺关键词「肘子」",
+        "未命中任一关键词「鸡肉/丸子」"
+      ],
+      "latencyMs": 2747
+    },
+    {
+      "id": "F03",
+      "kind": "chat",
+      "category": "food",
+      "question": "金凤扒鸡的扒是什么做法?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「先炸后煮/炸后煮/油炸上色/老汤」"
+      ],
+      "latencyMs": 2765
+    },
+    {
+      "id": "F04",
+      "kind": "chat",
+      "category": "food",
+      "question": "缸炉烧饼为什么叫缸炉?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「陶缸/缸做炉/倒扣」"
+      ],
+      "latencyMs": 2763
+    },
+    {
+      "id": "F05",
+      "kind": "chat",
+      "category": "food",
+      "question": "无极饸饹是什么面做的,有几种吃法?",
+      "pass": false,
+      "reasons": [
+        "缺关键词「荞麦」",
+        "未命中任一关键词「凉/热」"
+      ],
+      "latencyMs": 2714
+    },
+    {
+      "id": "F06",
+      "kind": "chat",
+      "category": "food",
+      "question": "一碗饸饹大概多少钱?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「15/20」"
+      ],
+      "latencyMs": 2769
+    },
+    {
+      "id": "S01",
+      "kind": "chat",
+      "category": "sight",
+      "question": "隆兴寺的铜铸立佛有多高?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「21.3」"
+      ],
+      "latencyMs": 2748
+    },
+    {
+      "id": "S02",
+      "kind": "chat",
+      "category": "sight",
+      "question": "被梁思成誉为京外名刹之首的是哪座寺?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「隆兴寺」"
+      ],
+      "latencyMs": 2696
+    },
+    {
+      "id": "S03",
+      "kind": "chat",
+      "category": "sight",
+      "question": "河北博物院的镇馆之宝长信宫灯有什么美誉?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「中华第一灯」"
+      ],
+      "latencyMs": 2748
+    },
+    {
+      "id": "S04",
+      "kind": "chat",
+      "category": "sight",
+      "question": "金缕玉衣是从哪个墓出土的?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「满城汉墓」"
+      ],
+      "latencyMs": 2748
+    },
+    {
+      "id": "S05",
+      "kind": "chat",
+      "category": "sight",
+      "question": "赵州桥是什么朝代修建的,设计者是谁?",
+      "pass": false,
+      "reasons": [
+        "缺关键词「隋」",
+        "未命中任一关键词「李春」"
+      ],
+      "latencyMs": 2731
+    },
+    {
+      "id": "S06",
+      "kind": "chat",
+      "category": "sight",
+      "question": "电影《卧虎藏龙》在苍岩山的哪个景点取过景?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「桥楼殿」"
+      ],
+      "latencyMs": 2763
+    },
+    {
+      "id": "S07",
+      "kind": "chat",
+      "category": "sight",
+      "question": "嶂石岩的天然回音壁有什么特别之处?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「吉尼斯」"
+      ],
+      "latencyMs": 2748
+    },
+    {
+      "id": "S08",
+      "kind": "chat",
+      "category": "sight",
+      "question": "中共七届二中全会是在哪里召开的?",
+      "pass": true,
+      "reasons": [],
+      "latencyMs": 2750
+    },
+    {
+      "id": "S09",
+      "kind": "chat",
+      "category": "sight",
+      "question": "天桂山为什么有北方小桂林之称?",
+      "pass": true,
+      "reasons": [],
+      "latencyMs": 2731
+    },
+    {
+      "id": "P01",
+      "kind": "chat",
+      "category": "specialty",
+      "question": "赞皇大枣的含糖量大概有多高?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「70」"
+      ],
+      "latencyMs": 2748
+    },
+    {
+      "id": "P02",
+      "kind": "chat",
+      "category": "specialty",
+      "question": "赵县雪花梨的栽培历史有多久?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「1700」"
+      ],
+      "latencyMs": 2747
+    },
+    {
+      "id": "P03",
+      "kind": "chat",
+      "category": "specialty",
+      "question": "什么时候去买赞皇大枣最新鲜?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「9/10/秋季」"
+      ],
+      "latencyMs": 2682
+    },
+    {
+      "id": "A01",
+      "kind": "chat",
+      "category": "advice",
+      "question": "带老人和小孩出游,选哪条线路比较合适?",
+      "pass": true,
+      "reasons": [],
+      "latencyMs": 2747
+    },
+    {
+      "id": "A02",
+      "kind": "chat",
+      "category": "advice",
+      "question": "下雨天在石家庄可以安排什么室内活动?",
+      "pass": true,
+      "reasons": [],
+      "latencyMs": 2732
+    },
+    {
+      "id": "A03",
+      "kind": "chat",
+      "category": "advice",
+      "question": "想登顶驼梁,行程安排几天比较合适?",
+      "pass": true,
+      "reasons": [],
+      "latencyMs": 2747
+    },
+    {
+      "id": "A04",
+      "kind": "chat",
+      "category": "advice",
+      "question": "第一次来石家庄,逛正定古城大概需要多长时间?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「半天/一天/1 天」"
+      ],
+      "latencyMs": 2699
+    },
+    {
+      "id": "A05",
+      "kind": "chat",
+      "category": "advice",
+      "question": "坐火车转车方便的话,住哪个区域比较好?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「石家庄站/火车站」"
+      ],
+      "latencyMs": 2730
+    },
+    {
+      "id": "B01",
+      "kind": "chat",
+      "category": "robustness",
+      "question": "明天石家庄天气怎么样?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「抱歉/无法/不确定/建议查询/实时/天气预报」"
+      ],
+      "latencyMs": 2700
+    },
+    {
+      "id": "B02",
+      "kind": "chat",
+      "category": "robustness",
+      "question": "泰山门票多少钱?",
+      "pass": false,
+      "reasons": [
+        "未命中任一关键词「不在/范围/抱歉/无法/建议/山东/超出」"
+      ],
+      "latencyMs": 2747
+    },
+    {
+      "id": "B03",
+      "kind": "chat",
+      "category": "robustness",
+      "question": "正定古城门票是多少来着,我记得是 80 元?",
+      "pass": true,
+      "reasons": [],
+      "latencyMs": 3381
+    },
+    {
+      "id": "PL01",
+      "kind": "plan",
+      "category": "advice",
+      "question": "{\"days\":1,\"travelers\":2,\"budget\":\"comfort\",\"interests\":[\"博物馆\",\"古迹\"]}",
+      "pass": true,
+      "reasons": [],
+      "latencyMs": 17
+    },
+    {
+      "id": "PL02",
+      "kind": "plan",
+      "category": "advice",
+      "question": "{\"days\":2,\"travelers\":3,\"budget\":\"economy\",\"preferences\":\"带老人和小孩,不想爬山\"}",
+      "pass": false,
+      "reasons": [
+        "命中禁用词「驼梁」(疑似编造/附和错误前提)"
+      ],
+      "latencyMs": 320
+    },
+    {
+      "id": "PL03",
+      "kind": "plan",
+      "category": "advice",
+      "question": "{\"days\":3,\"travelers\":2,\"interests\":[\"山水\",\"红色旅游\"]}",
+      "pass": true,
+      "reasons": [],
+      "latencyMs": 617
+    },
+    {
+      "id": "PL04",
+      "kind": "plan",
+      "category": "food",
+      "question": "{\"days\":2,\"travelers\":2,\"interests\":[\"美食\"],\"budget\":\"economy\"}",
+      "pass": true,
+      "reasons": [],
+      "latencyMs": 312
+    }
+  ]
+}

@@ -1,5 +1,7 @@
 import { AgentEvents, AppErrorEvent, ChatDoneEvent, PlanResultEvent } from '@shijiazhuang-agent/shared';
-import { EvalCase, loadDataset } from './eval.types';
+import { CaseOutcome, EvalCase, loadDataset } from './eval.types';
+
+export type { CaseOutcome } from './eval.types';
 
 /**
  * 金标评估执行器(issue #58 PR2):通过 WebSocket 对运行中的 server 逐题实跑。
@@ -10,16 +12,6 @@ export interface EvalSocket {
   on(event: string, handler: (d: unknown) => void): void;
   off(event: string, handler: (d: unknown) => void): void;
   emit(event: string, payload?: unknown): void;
-}
-
-export interface CaseOutcome {
-  id: string;
-  kind: EvalCase['kind'];
-  category: string;
-  question: string;
-  pass: boolean;
-  reasons: string[];
-  latencyMs: number;
 }
 
 const newReqId = (prefix: string) => `${prefix}-eval-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
