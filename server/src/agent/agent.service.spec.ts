@@ -45,6 +45,7 @@ function makeConfig(over: Partial<AppConfig['llm']> & Partial<AppConfig['chat']>
     },
     rag: { dataDir: 'data', topK: 5, chunkSize: 500, chunkOverlap: 50, hybrid: false },
     chat: { historyTurns: 6, sessionTtlMs: 30 * 60_000, questionMaxLen: over.questionMaxLen ?? 500 },
+    rateLimit: { maxConcurrentPerSession: 1, perWindow: 30, windowMs: 60_000 },
   };
 }
 

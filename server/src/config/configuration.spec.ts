@@ -12,6 +12,24 @@ describe('buildAppConfig 默认值与开关(issue #9 相关)', () => {
     expect(c.llm.timeoutMs).toBe(180000);
   });
 
+  it('限流默认值(issue #62):并发 1 + 每分钟 30 次', () => {
+    const c = buildAppConfig({});
+    expect(c.rateLimit.maxConcurrentPerSession).toBe(1);
+    expect(c.rateLimit.perWindow).toBe(30);
+    expect(c.rateLimit.windowMs).toBe(60_000);
+  });
+
+  it('限流阈值可由环境变量覆盖', () => {
+    const c = buildAppConfig({
+      WS_MAX_CONCURRENT_PER_SESSION: '2',
+      WS_RATE_LIMIT_PER_WINDOW: '10',
+      WS_RATE_LIMIT_WINDOW_MS: '5000',
+    });
+    expect(c.rateLimit.maxConcurrentPerSession).toBe(2);
+    expect(c.rateLimit.perWindow).toBe(10);
+    expect(c.rateLimit.windowMs).toBe(5000);
+  });
+
   it('RAG_HYBRID=0 / false 关闭混合检索', () => {
     expect(buildAppConfig({ RAG_HYBRID: '0' }).rag.hybrid).toBe(false);
     expect(buildAppConfig({ RAG_HYBRID: 'false' }).rag.hybrid).toBe(false);

@@ -105,7 +105,8 @@ export type AppErrorCode =
   | 'LLM_ERROR'
   | 'RAG_ERROR'
   | 'CANCELLED'
-  | 'INTERNAL';
+  | 'INTERNAL'
+  | 'RATE_LIMITED'; // issue #62:超出速率/并发限制
 
 export interface AppErrorEvent {
   requestId?: string;
