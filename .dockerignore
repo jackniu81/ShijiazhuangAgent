@@ -1,0 +1,31 @@
+# 构建上下文瘦身:这些文件不进镜像(尤其 .env 含密钥,必须排除)
+node_modules
+**/node_modules
+dist
+**/dist
+build
+**/build
+coverage
+**/coverage
+
+.env
+.env.*
+!.env.docker.example
+*.log
+npm-debug.log*
+
+.git
+.github
+.vscode
+.idea
+.DS_Store
+
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# 文档与本地脚本不参与构建产物
+docs
+require.md
+AGENTS.md
+.qoder-*
