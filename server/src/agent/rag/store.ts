@@ -1,7 +1,7 @@
 import { Bm25Index } from './bm25';
 import { metaBoostScore, rrfFuse } from './fusion';
 import { cosineSimilarity } from './math';
-import { Chunk, Embedder, RetrievedDoc, VectorStore } from './rag.types';
+import { Chunk, Embedder, RetrievedDoc, WritableVectorStore } from './rag.types';
 
 interface IndexedChunk extends Chunk {
   vector: number[];
@@ -14,9 +14,9 @@ export interface VectorStoreOptions {
 
 /**
  * 内存索引:向量(纯 TS 余弦相似度)+ BM25 关键词,双路 RRF 融合 + tag/region 规则 rerank。
- * 语料变大或冷启动变慢时,可替换为持久化实现(sqlite-vss / LanceDB),search 接口不变。
+ * 持久化后端见 PgVectorStore(issue #29),两者均满足 VectorStore 消费侧契约,可按配置切换。
  */
-export class InMemoryVectorStore implements VectorStore {
+export class InMemoryVectorStore implements WritableVectorStore {
   private readonly items: IndexedChunk[] = [];
   private readonly bm25 = new Bm25Index();
   private readonly hybrid: boolean;

@@ -5,6 +5,9 @@ export const APP_CONFIG = Symbol('APP_CONFIG');
 
 export type LlmProviderName = 'mock' | 'siliconflow' | 'ollama';
 
+/** RAG 向量存储后端(issue #29):内存 or pgvector 持久化。 */
+export type RagBackend = 'memory' | 'pgvector';
+
 /** 集中式、带默认值与类型转换的应用配置。 */
 export interface AppConfig {
   llm: {
@@ -29,6 +32,14 @@ export interface AppConfig {
     chunkOverlap: number;
     /** BM25 + 向量混合检索(RRF 融合),issue #9,默认开 */
     hybrid: boolean;
+    /** 向量存储后端:memory(默认) | pgvector(issue #29) */
+    backend: RagBackend;
+    /** pgvector 连接串(DATABASE_URL),backend=pgvector 时必填 */
+    databaseUrl: string;
+    /** 向量维度,须与 embedder 输出一致(bge-m3=1024,mock=256) */
+    vectorDim: number;
+    /** 向量表名,默认 rag_chunks */
+    vectorTable: string;
   };
   chat: {
     historyTurns: number;
@@ -49,6 +60,8 @@ const int = (v: string | undefined, def: number): number => {
 
 const provider = (v: string | undefined): LlmProviderName =>
   v === 'siliconflow' || v === 'ollama' ? v : 'mock';
+
+const ragBackend = (v: string | undefined): RagBackend => (v === 'pgvector' ? 'pgvector' : 'memory');
 
 export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
@@ -74,6 +87,10 @@ export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig 
       chunkSize: int(env.RAG_CHUNK_SIZE, 500),
       chunkOverlap: int(env.RAG_CHUNK_OVERLAP, 50),
       hybrid: bool(env.RAG_HYBRID, true),
+      backend: ragBackend(env.RAG_STORE_BACKEND),
+      databaseUrl: env.DATABASE_URL ?? '',
+      vectorDim: int(env.RAG_VECTOR_DIM, 1024),
+      vectorTable: env.RAG_VECTOR_TABLE ?? 'rag_chunks',
     },
     chat: {
       historyTurns: int(env.CHAT_HISTORY_TURNS, 6),
