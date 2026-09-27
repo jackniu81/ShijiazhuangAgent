@@ -7,6 +7,7 @@
 - **协议**:Socket.IO(NestJS `@nestjs/websockets` + `socket.io`)
 - **地址**:与 HTTP 服务同源,`ws://localhost:3000/ws`(namespace:`/agent`)
 - 开发模式下 Vite 代理 `/ws` 到 server,生产模式同域,无需额外配置
+- **连接鉴权**(issue #61):握手时经 `socket.io` 的 `auth: { token }` 携带静态令牌,server 在 `/agent` namespace middleware 校验(环境变量 `WS_TOKEN`,client 构建期 `VITE_WS_TOKEN`)。校验失败以 `connect_error`(code=`UNAUTHORIZED`)拒绝,连接根本建立;`WS_TOKEN` 留空则不鉴权(仅开发用途)
 - 事件名采用 `域:动作` 小写冒号分隔,如 `plan:create`
 
 ## 2. 通用约定

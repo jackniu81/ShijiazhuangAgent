@@ -56,6 +56,7 @@ function makeConfig(over: Partial<AppConfig['llm']> & Partial<AppConfig['chat']>
     },
     chat: { historyTurns: 6, sessionTtlMs: 30 * 60_000, questionMaxLen: over.questionMaxLen ?? 500 },
     rateLimit: { maxConcurrentPerSession: 1, perWindow: 30, windowMs: 60_000 },
+    wsAuth: { token: '' },
   };
 }
 

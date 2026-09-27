@@ -32,6 +32,11 @@ FROM node:24-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+# 连接鉴权 token(issue #61):Vite 只烘焙 VITE_ 前缀的**文件**变量,
+# 而 .env* 被 .dockerignore 排除,故经此 ARG → 环境变量透传给 client 构建。
+# 注意:token 烧进镜像层,更换 token 需重新 build(公开静态令牌,定位见 docs/deploy.md)
+ARG WS_TOKEN=""
+ENV VITE_WS_TOKEN=${WS_TOKEN}
 RUN npm run build
 
 # ---------- 4) 运行层:仅带生产依赖与构建产物 ----------

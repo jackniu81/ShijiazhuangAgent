@@ -30,6 +30,11 @@ describe('buildAppConfig 默认值与开关(issue #9 相关)', () => {
     expect(c.rateLimit.windowMs).toBe(5000);
   });
 
+  it('连接鉴权(issue #61):默认空 token 不鉴权,WS_TOKEN 可覆盖', () => {
+    expect(buildAppConfig({}).wsAuth.token).toBe('');
+    expect(buildAppConfig({ WS_TOKEN: 'secret' }).wsAuth.token).toBe('secret');
+  });
+
   it('RAG_HYBRID=0 / false 关闭混合检索', () => {
     expect(buildAppConfig({ RAG_HYBRID: '0' }).rag.hybrid).toBe(false);
     expect(buildAppConfig({ RAG_HYBRID: 'false' }).rag.hybrid).toBe(false);

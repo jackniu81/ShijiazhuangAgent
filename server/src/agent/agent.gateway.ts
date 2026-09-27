@@ -2,6 +2,7 @@ import { Inject, Logger } from '@nestjs/common';
 import {
   OnGatewayConnection,
   OnGatewayDisconnect,
+  OnGatewayInit,
   SubscribeMessage,
   WebSocketGateway,
   WebSocketServer,
@@ -18,6 +19,9 @@ import { APP_CONFIG, AppConfig } from '../config/configuration';
 import { WsRateLimiter, RateLimitKeys } from './rate-limit';
 import { AgentService, Emit } from './agent.service';
 
+/** namespace middleware 的 next 回调(与 socket.io Handler 同构,便于单测注入)。 */
+type NextFn = (err?: Error) => void;
+
 /**
  * WebSocket 网关 —— namespace `/agent`,path `/ws`(与 HTTP 同源共享端口)。
  * 严格实现 docs/api-spec.md 定义的事件契约。
@@ -27,7 +31,7 @@ import { AgentService, Emit } from './agent.service';
   path: '/ws',
   cors: { origin: '*' },
 })
-export class AgentGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class AgentGateway implements OnGatewayInit, OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
   server: Server;
 
@@ -39,6 +43,9 @@ export class AgentGateway implements OnGatewayConnection, OnGatewayDisconnect {
   /** IP + 会话双维度限流器(issue #62)。 */
   private readonly limiter: WsRateLimiter;
 
+  /** 连接鉴权 token(issue #61,R1);空串 = 不鉴权(开发默认)。 */
+  private readonly authToken: string;
+
   /** 进行中的请求:requestId -> 会话 key,用于结束后归还并发额度。 */
   private readonly sessionOf = new Map<string, string>();
 
@@ -47,6 +54,57 @@ export class AgentGateway implements OnGatewayConnection, OnGatewayDisconnect {
     @Inject(APP_CONFIG) config: AppConfig,
   ) {
     this.limiter = new WsRateLimiter(config.rateLimit);
+    this.authToken = config.wsAuth.token;
+  }
+
+  /**
+   * issue #61:向 `/agent` namespace 挂接鉴权 middleware。
+   * Nest 触发 afterInit 时传入本 gateway 对应的服务对象:
+   * 带 namespace 的 gateway 拿到的是 Namespace 实例(无 of),源头 Server 则经 of 取命名空间。
+   * 注意:use 必须原样挂在接收者上调用,解绑 this 会破坏 socket.io 内部状态。
+   */
+  afterInit(injected?: unknown): void {
+    const target = this.resolveAuthTarget(injected);
+    if (!target) {
+      this.logger.warn('namespace /agent unavailable, auth middleware not installed');
+      return;
+    }
+    if (!this.authToken) {
+      this.logger.warn('WS_TOKEN not set — /agent namespace accepts unauthenticated connections (dev only)');
+      return;
+    }
+    target.use((socket: Socket, next: NextFn) => this.authorize(socket, next));
+    this.logger.log('auth middleware installed on /agent');
+  }
+
+  /** 统一解析出带 use 的挂接对象(Server → /agent Namespace,Namespace → 自身)。 */
+  private resolveAuthTarget(injected: unknown): { use: (mw: (s: Socket, n: NextFn) => void) => void } | undefined {
+    const obj = injected as { of?: (ns: string) => unknown; use?: unknown } | undefined;
+    if (!obj) return undefined;
+    if (typeof obj.of === 'function') {
+      const ns = obj.of('/agent') as { use?: unknown } | undefined;
+      return ns && typeof ns.use === 'function'
+        ? { use: (mw) => (ns.use as (f: typeof mw) => void)(mw) }
+        : undefined;
+    }
+    return typeof obj.use === 'function'
+      ? { use: (mw) => (obj.use as (f: typeof mw) => void)(mw) }
+      : undefined;
+  }
+
+  /** 校验握手携带的静态 token(client.auth.token,issue #61);失败以 UNAUTHORIZED 拒绝连接。 */
+  authorize(socket: Socket, next: NextFn): void {
+    const presented = (socket.handshake.auth as { token?: unknown } | undefined)?.token;
+    if (typeof presented === 'string' && presented === this.authToken) {
+      next();
+      return;
+    }
+    const addr = socket.handshake?.address ?? 'unknown';
+    this.logger.warn(`unauthorized ws connection from ${addr}`);
+    const err = Object.assign(new Error('连接未授权:请提供有效的访问令牌。'), {
+      code: 'UNAUTHORIZED',
+    });
+    next(err);
   }
 
   handleConnection(client: Socket): void {
