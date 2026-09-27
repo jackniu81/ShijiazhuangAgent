@@ -13,19 +13,11 @@ export interface IndexOptions {
 }
 
 /**
- * 扫描 dataDir 下所有 .md,解析 front-matter + 切块 + 向量化,构建内存索引。
- * 目录不存在时返回空索引(降级,不抛错)。
+ * 扫描 dataDir 下所有 .md,解析 front-matter + 切块,返回尚未向量化的切块列表。
+ * 内存与 pgvector 后端共用此收集逻辑(issue #29)。目录不存在时返回空数组。
  */
-export async function buildIndexFromDir(
-  dataDir: string,
-  embedder: Embedder,
-  options: IndexOptions = {},
-): Promise<InMemoryVectorStore> {
-  const store = new InMemoryVectorStore({ hybrid: options.hybrid });
+export function collectChunksFromDir(dataDir: string, options: IndexOptions = {}): Chunk[] {
   const files = listMarkdownFiles(dataDir);
-  if (!files.length) return store;
-
-  // 1) 收集所有切块(先不向量化,便于批量 embed)
   const pieces: Chunk[] = [];
   for (const abs of files) {
     const source = toSourcePath(dataDir, abs);
@@ -35,9 +27,23 @@ export async function buildIndexFromDir(
       pieces.push({ text, source, meta });
     }
   }
+  return pieces;
+}
+
+/**
+ * 扫描 dataDir 下所有 .md,解析 front-matter + 切块 + 向量化,构建内存索引。
+ * 目录不存在时返回空索引(降级,不抛错)。
+ */
+export async function buildIndexFromDir(
+  dataDir: string,
+  embedder: Embedder,
+  options: IndexOptions = {},
+): Promise<InMemoryVectorStore> {
+  const store = new InMemoryVectorStore({ hybrid: options.hybrid });
+  const pieces = collectChunksFromDir(dataDir, options);
   if (!pieces.length) return store;
 
-  // 2) 批量向量化并写入索引
+  // 批量向量化并写入索引
   const vectors = await embedder(pieces.map((p) => p.text));
   pieces.forEach((piece, i) => store.add(piece, vectors[i] ?? []));
   return store;

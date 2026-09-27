@@ -43,7 +43,17 @@ function makeConfig(over: Partial<AppConfig['llm']> & Partial<AppConfig['chat']>
       siliconflow: { apiKey: '', baseUrl: '', chatModel: '', embedModel: '' },
       ollama: { baseUrl: '', chatModel: '', embedModel: '' },
     },
-    rag: { dataDir: 'data', topK: 5, chunkSize: 500, chunkOverlap: 50, hybrid: false },
+    rag: {
+      dataDir: 'data',
+      topK: 5,
+      chunkSize: 500,
+      chunkOverlap: 50,
+      hybrid: false,
+      backend: 'memory',
+      databaseUrl: '',
+      vectorDim: 1024,
+      vectorTable: 'rag_chunks',
+    },
     chat: { historyTurns: 6, sessionTtlMs: 30 * 60_000, questionMaxLen: over.questionMaxLen ?? 500 },
     rateLimit: { maxConcurrentPerSession: 1, perWindow: 30, windowMs: 60_000 },
   };

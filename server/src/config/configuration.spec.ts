@@ -42,4 +42,28 @@ describe('buildAppConfig 默认值与开关(issue #9 相关)', () => {
     expect(buildAppConfig({ LLM_PROVIDER: 'ollama' }).llm.provider).toBe('ollama');
     expect(buildAppConfig({ LLM_PROVIDER: 'unknown' }).llm.provider).toBe('mock');
   });
+  
+  it('issue #29 向量后端默认 memory,pgvector 需显式开关', () => {
+    const def = buildAppConfig({});
+    expect(def.rag.backend).toBe('memory');
+    expect(def.rag.databaseUrl).toBe('');
+    expect(def.rag.vectorDim).toBe(1024);
+    expect(def.rag.vectorTable).toBe('rag_chunks');
+  
+    const pg = buildAppConfig({
+      RAG_STORE_BACKEND: 'pgvector',
+      DATABASE_URL: 'postgres://u:p@localhost:5432/agent',
+      RAG_VECTOR_DIM: '256',
+      RAG_VECTOR_TABLE: 'my_chunks',
+    });
+    expect(pg.rag.backend).toBe('pgvector');
+    expect(pg.rag.databaseUrl).toBe('postgres://u:p@localhost:5432/agent');
+    expect(pg.rag.vectorDim).toBe(256);
+    expect(pg.rag.vectorTable).toBe('my_chunks');
+  
+    // 非法/未知取值回退 memory
+    expect(buildAppConfig({ RAG_STORE_BACKEND: 'chroma' }).rag.backend).toBe('memory');
+    // 非法维度数值回退默认 1024
+    expect(buildAppConfig({ RAG_VECTOR_DIM: 'abc' }).rag.vectorDim).toBe(1024);
+  });
 });
