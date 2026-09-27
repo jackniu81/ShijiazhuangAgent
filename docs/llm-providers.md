@@ -31,7 +31,7 @@ npm run start -w server
 |------|------|
 | `LLM_PROVIDER` 取值非法 | warn 日志 + 自动回退 `mock`，正常启动 |
 | `siliconflow` 但 `SILICONFLOW_API_KEY` 为空 | warn 日志 + 自动回退 `mock`，正常启动 |
-| `ollama` 但本机服务未启动 | **不**在启动期探测，第一次请求时以 `app:error(LLM_ERROR)` 报出 |
+| `ollama` 但本机服务未启动 | **不**在启动期探测；首次请求失败后按降级链改投备选（#60），`LLM_FALLBACK=0` 时才以 `app:error(LLM_ERROR)` 报出 |
 
 **请求级（issue #8 已实现，`http.ts` + providers）：**
 
@@ -40,7 +40,14 @@ npm run start -w server
 - 超时：`LLM_TIMEOUT_MS`（默认 180s，issue #27 实测后从 60s 上调），流式全程受控
 - 失败最终形态：客户端收到 `app:error{ code: 'LLM_ERROR' }`，前端 toast 可重试
 
-**运行期跨 Provider 降级链（siliconflow→ollama→mock）**：未实现，立项于 MS-005 #59。
+**运行期跨 Provider 降级链（issue #60 已实现，`fallback.provider.ts`）：**
+
+- 启动时按 `siliconflow → ollama → mock` 组链，只有"配了就能用"的厂商入链（缺 Key 跳过），链尾恒为 `mock`；选型即 mock 时不组链
+- 同一厂商连续失败 `LLM_CIRCUIT_FAILURES`（默认 3）次进入 `LLM_CIRCUIT_COOLDOWN_MS`（默认 60s）熔断，期内请求跳过它，到期放行一次探测
+- 流式已吐 token 后失败**不换人**（避免前端内容重复），错误原样抛出
+- `embed` 恒走链首，不跨厂商降级：向量维度不一致会污染 `rag_chunks`；检索期失败由 RAG 自身降级为无本地资料
+- 换人承接时，问答末尾追加 `(注:主模型 X 暂不可用，本次由 Y 兜底回答。)`，行程写进 `tips`；落到 mock 的行程请求回放模板 JSON，不会吐无法解析的行程
+- `LLM_FALLBACK=0` 关闭，退回单厂商模式
 
 ## 3. 端到端验收记录
 
@@ -70,7 +77,7 @@ npm run start -w server
 | plan(2 天) 全程 | ~163s（大头是 plan 节点单次大 JSON 调用），day 事件逐个到达，结果结构完整 |
 | 失败降级实测 | 首轮默认 60s 超时下 plan 报错 `app:error{LLM_ERROR:"响应超时"}`→前端可重试，符合预期（因此代码默认值已上调为 180s） |
 
-**结论：chat + plan 全链路真实 LLM 验收 PASS ✅**。慢是免费池队列特性；代码默认超时已按此实测上调为 `LLM_TIMEOUT_MS=180000`，根治靠付费额度/更快模型，或 #59 运行期跨 Provider 降级。
+**结论：chat + plan 全链路真实 LLM 验收 PASS ✅**。慢是免费池队列特性；代码默认超时已按此实测上调为 `LLM_TIMEOUT_MS=180000`，根治靠付费额度/更快模型，或 #60 运行期跨 Provider 降级。
 
 ### Ollama（qwen3:1.7b，本机实测 2026-09-27）
 
@@ -83,6 +90,19 @@ npm run start -w server
 | plan(2 天) 全程 | ~8.6s | ~8.3s |
 
 **限制**：本机无 embedding 模型（qwen3:1.7b 试作 embed 返回 500/501），启动时 RAG 索引构建失败→**优雅降级为无检索模式**（已实测降级路径工作正常：回答不带 sources，链路不断）。要解锁完整 RAG 需 `ollama pull bge-m3`；首次请求的 35s 冷启动载入可考虑生产环境预热或常驻。
+
+### Run 3 · 降级链（`LLM_PROVIDER=siliconflow` + 无效 Key）— 2026-09-27
+
+启动日志：`LLM 降级链:siliconflow → ollama → mock(连续 3 次失败即熔断 60000ms)`；本机 ollama 在跑但缺 `qwen2.5:7b`，形成"两家都不可用"的真实场景。
+
+| 阶段 | 结果 |
+|------|------|
+| 启动 | RAG 索引构建失败（embed 401 `Token is invalid`）→ 降级为无检索模式，服务照常起 |
+| chat:ask | `chat:done`（167 字），尾部依次注明"本地资料检索暂不可用"与"主模型 siliconflow 暂不可用，本次由 mock 兜底回答" |
+| plan:create(2 天) | `plan:result`，2 天 / 每天 2 项，`tips` 末条为同一段兜底说明 |
+| 链路日志 | `siliconflow 调用失败(401)` → `ollama 调用失败(model not found)` → `已降级承接:siliconflow → ollama → mock` |
+
+**结论：主 key 失效时服务自动降级且用户可感知，#60 验收标准 1 ✅**（冒烟脚本 `.qoder-smoke60.mjs`，验证后删除）。
 
 ### 附：SiliconFlow 候选模型速度基准（2026-09-27，两轮采样）
 
@@ -101,4 +121,4 @@ npm run start -w server
 
 - mock provider 的 emit 间隔 300ms 硬编码（roadmap 已记录，待配置化）
 - SiliconFlow 免费额度限 QPM，压测场景需换付费 Key
-- `ollama` 启动期不做健康检查，报错延迟到首次请求（改进候选：#59 启动探测）
+- `ollama` 启动期不做健康检查，首次请求才暴露（有降级链时表现为静默改投 mock）；启动探测仍是改进候选

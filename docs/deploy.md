@@ -54,6 +54,9 @@ docker compose ps ; docker compose logs -f app
 |------|------|------|
 | `LLM_PROVIDER` | `mock` | `mock`/`siliconflow`/`ollama`;缺 Key 时自动回退 mock 并打 warn |
 | `LLM_TIMEOUT_MS` | `180000` | 免费池慢模型首 token 可达分钟级,勿轻易调小 |
+| `LLM_FALLBACK` | `1` | 运行期降级链(issue #60),`0` 关闭;选型即 mock 时不组链 |
+| `LLM_CIRCUIT_FAILURES` | `3` | 同一厂商连续失败几次后熔断跳过 |
+| `LLM_CIRCUIT_COOLDOWN_MS` | `60000` | 熔断冷却时长,到期放行一次探测 |
 | `SILICONFLOW_CHAT_MODEL` | `Qwen/Qwen2.5-7B-Instruct` | 实测最快 `THUDM/GLM-4-9B-0414`(见 llm-providers.md 基准表) |
 | `OLLAMA_BASE_URL` | `http://ollama:11434` | 容器内服务名;连宿主机 Ollama 改 `http://host.docker.internal:11434` |
 | `DATA_DIR` | 镜像内 `/app/data` | 语料目录,compose 已用只读卷覆盖 |
@@ -68,6 +71,18 @@ docker compose ps ; docker compose logs -f app
 - **Docker 是构建期烘焙**:compose 已把 `WS_TOKEN` 同时传给 build arg(client)与容器 environment(server),改 token 后需 `up -d --build` 重建镜像才生效
 - **本地开发**:server 用 `server/.env` 的 `WS_TOKEN`,client 复制 `client/.env.example` 为 `client/.env.local` 填同名值(两侧都重启/重跑 vite)
 - **定位**:浏览器端 token 必然可见,这层只防"任何人连上来刷 LLM 额度",不是访问控制;真正的用户体系(JWT)待用户系统再议(见 issue #61)
+
+### 3.2 LLM 降级链与熔断(issue #60)
+
+主模型挂掉(免费池 5xx、Ollama 没起)不再让整个请求失败:启动时按 `siliconflow → ollama → mock` 组一条降级链,只有"配了就能用"的厂商入链(缺 Key 的会被跳过),链尾恒为 mock。
+
+- **熔断**:同一厂商连续失败 `LLM_CIRCUIT_FAILURES` 次即冷却 `LLM_CIRCUIT_COOLDOWN_MS`,期内请求直接跳过它;到期放行一次探测,成功即复位
+- **流式只在"没吐过 token"时换人**:已经往前端写过内容就不切换,避免答案重复,错误原样抛出
+- **embedding 不降级**:各厂商向量维度不同(bge-m3 1024 / mock 256),混用会污染 `rag_chunks`;检索期 embedding 失败由 RAG 自身降级为无本地资料
+- **用户可感知**:实际承接方与所选厂商不一致时,问答末尾追加 `(注:主模型 X 暂不可用,本次由 Y 兜底回答。)`,行程则把同样的话写进 `tips`
+- 落到 mock 的行程请求会回放模板 JSON,链路不会因降级而输出无法解析的内容
+
+`LLM_FALLBACK=0` 可退回单厂商模式。成本/延迟档案属 #60 二期,尚未实现。
 
 ## 4. 运维动作
 

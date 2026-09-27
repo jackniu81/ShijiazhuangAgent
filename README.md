@@ -67,6 +67,7 @@ docker compose up -d --build   # 一个镜像含 server + client,暴露 :3000
 | 变量 | 默认 | 说明 |
 |------|------|------|
 | `LLM_PROVIDER` | `mock` | `mock` \| `siliconflow` \| `ollama` |
+| `LLM_FALLBACK` | `1` | 主模型故障时按 siliconflow → ollama → mock 自动降级,`0` 关闭 |
 | `SILICONFLOW_API_KEY` | - | 选 siliconflow 时必填 |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | 本机 ollama serve |
 | `RAG_HYBRID` | `1` | BM25+向量混合检索开关,`0` 退回纯向量 |

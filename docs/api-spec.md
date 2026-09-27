@@ -113,7 +113,7 @@ interface ChatTokenEvent {
 interface ChatDoneEvent {
   requestId: string;
   sessionId: string;
-  answer: string;              // 完整文本(与 token 拼接结果一致,便于容错)
+  answer: string;              // 完整文本(与 token 拼接结果一致,便于容错;RAG/LLM 降级时末尾追加"(注:…)"说明)
   sources?: string[];          // RAG 引用的本地文件,如 "景点/正定古城.md"
 }
 ```
