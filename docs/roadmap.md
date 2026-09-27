@@ -107,10 +107,10 @@ Provider 代码已接完（#8），剩下的不是"调通"而是"**验出效果*
 | #29 向量检索持久化（pgvector，含会话持久化二阶段） | 自 MS-999 迁入 | ⬜ 待处理 |
 | #36 部署与运维（Docker Compose：server + client + postgres） | 自 MS-999 迁入 | ⬜ 待处理 |
 | #58 金标评估集：30-50 个固定问题回归基线 | 新建 | ⬜ 待处理 |
-| #59 plan JSON 输出校验加固与自动重试 | 新建 | ⬜ 待处理 |
+| #59 plan JSON 输出校验加固与自动重试 | 新建 | ✅ 已完成（2026-09-27，zod schema 校验 + 带错误原因回炉 1 次，失败收敛为 `LLM_ERROR`） |
 | #60 LLM 降级链与成本延迟档案 | 新建 | ⬜ 待处理 |
 | #61 Socket.IO 连接鉴权（R1） | 新建，上线 blocker | ✅ 已完成（2026-09-27，`WS_TOKEN` 静态 token + namespace middleware，配置说明见 deploy.md §3.1） |
-| #62 WebSocket 请求限流（R2） | 新建，上线 blocker | ⬜ 待处理 |
+| #62 WebSocket 请求限流（R2） | 新建，上线 blocker | ✅ 已完成（2026-09-27，IP+会话双维度滑动窗口与并发控制） |
 
 ### [MS-006: Differentiation Loop](https://github.com/jackniu81/ShijiazhuangAgent/milestone/6)（差异化闭环，~1 个月）
 

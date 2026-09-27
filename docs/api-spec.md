@@ -130,6 +130,9 @@ interface AppErrorEvent {
 > `RATE_LIMITED`(issue #62):请求超过限流阈值(每会话并发数 / 每 IP·会话滑动窗口速率)时返回,
 > 阈值见 `server/.env.example` 的 `WS_MAX_CONCURRENT_PER_SESSION` / `WS_RATE_LIMIT_PER_WINDOW`。
 
+> `LLM_ERROR` 的一种来源(issue #59):模型返回的 plan JSON 未通过结构校验时,服务端带错误原因自动回炉重试
+> 1 次;仍不合法才发此事件。具体的校验细节只进服务端日志,不会出现在 message 里。
+
 ## 5. 交互时序
 
 ```
