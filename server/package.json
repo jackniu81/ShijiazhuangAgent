@@ -9,7 +9,9 @@
     "start": "node dist/main.js",
     "start:prod": "node dist/main.js",
     "test": "jest",
-    "test:cov": "jest --coverage"
+    "test:cov": "jest --coverage",
+    "eval": "npm run build && node dist/eval/eval.main.js",
+    "eval:quick": "jest --testPathPatterns src/eval"
   },
   "dependencies": {
     "@langchain/langgraph": "^1.4.17",
@@ -31,6 +33,7 @@
     "@types/jest": "^30.0.0",
     "@types/node": "^24.0.0",
     "jest": "^30.5.2",
+    "socket.io-client": "^4.8.1",
     "ts-jest": "^29.4.13",
     "typescript": "^5.7.2"
   },
