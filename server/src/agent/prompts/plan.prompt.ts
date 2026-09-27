@@ -36,3 +36,23 @@ export function buildPlanMessages(input: PlanPromptInput, docs: RetrievedDoc[]):
     { role: 'user', content: formatPlanRequest(input, docs) },
   ];
 }
+
+/** 脏输出回炉:把校验器的具体错误连同上次输出一起回喂,让模型定点修而不是重新发挥。 */
+export function buildPlanRepairMessages(
+  input: PlanPromptInput,
+  docs: RetrievedDoc[],
+  previousOutput: string,
+  reasons: string[],
+): Msg[] {
+  const feedback =
+    `你上一次的输出未通过结构校验,问题:\n` +
+    reasons.map((r) => `- ${r}`).join('\n') +
+    `\n\n上次输出(节选):\n${previousOutput.slice(0, 1500)}\n\n` +
+    `请修正后重新输出,只输出符合 schema 的 JSON,不要任何解释或多余文字。`;
+  return [
+    { role: 'system', content: PLAN_SYSTEM_PROMPT },
+    { role: 'user', content: formatPlanRequest(input, docs) },
+    { role: 'assistant', content: previousOutput.slice(0, 1500) },
+    { role: 'user', content: feedback },
+  ];
+}
