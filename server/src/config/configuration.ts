@@ -54,7 +54,7 @@ export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig 
   return {
     llm: {
       provider: provider(env.LLM_PROVIDER),
-      timeoutMs: int(env.LLM_TIMEOUT_MS, 60000),
+      timeoutMs: int(env.LLM_TIMEOUT_MS, 180000),
       siliconflow: {
         apiKey: env.SILICONFLOW_API_KEY ?? '',
         baseUrl: env.SILICONFLOW_BASE_URL ?? 'https://api.siliconflow.cn/v1',

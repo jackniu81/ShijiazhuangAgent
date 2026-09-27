@@ -37,7 +37,7 @@ npm run start -w server
 
 - 连接失败 / HTTP 5xx：自动重试 1 次（指数退避）
 - 流式已产出 token 后失败：**不重试**（避免前端内容重复），直接报错
-- 超时：`LLM_TIMEOUT_MS`（默认 60s），流式全程受控
+- 超时：`LLM_TIMEOUT_MS`（默认 180s，issue #27 实测后从 60s 上调），流式全程受控
 - 失败最终形态：客户端收到 `app:error{ code: 'LLM_ERROR' }`，前端 toast 可重试
 
 **运行期跨 Provider 降级链（siliconflow→ollama→mock）**：未实现，立项于 MS-005 #59。
@@ -60,7 +60,7 @@ npm run start -w server
 
 ### Run 2 · siliconflow（真实 Key）— 2026-09-27
 
-模型：`Qwen/Qwen3.5-4B` + `BAAI/bge-m3`，`LLM_TIMEOUT_MS=180000`（默认 60s 不够，见下）：
+模型：`Qwen/Qwen3.5-4B` + `BAAI/bge-m3`，`LLM_TIMEOUT_MS=180000`（原默认 60s 不够，已据此上调，见下）：
 
 | 指标 | 值 |
 |------|------|
@@ -68,9 +68,9 @@ npm run start -w server
 | chat 首 token | **45～81s**（两次实测，免费池排队所致） |
 | chat 总耗时 | 47.7s / 85.3s，回答质量正常，sources 命中 5 篇语料 |
 | plan(2 天) 全程 | ~163s（大头是 plan 节点单次大 JSON 调用），day 事件逐个到达，结果结构完整 |
-| 失败降级实测 | 首轮默认 60s 超时下 plan 报错 `app:error{LLM_ERROR:"响应超时"}`→前端可重试，符合预期 |
+| 失败降级实测 | 首轮默认 60s 超时下 plan 报错 `app:error{LLM_ERROR:"响应超时"}`→前端可重试，符合预期（因此代码默认值已上调为 180s） |
 
-**结论：chat + plan 全链路真实 LLM 验收 PASS ✅**。慢是免费池队列特性；建议：换付费额度/更快模型，或保持 `LLM_TIMEOUT_MS≥180000`。运行期跨 Provider 降级可彻底缓解，见 #59。
+**结论：chat + plan 全链路真实 LLM 验收 PASS ✅**。慢是免费池队列特性；代码默认超时已按此实测上调为 `LLM_TIMEOUT_MS=180000`，根治靠付费额度/更快模型，或 #59 运行期跨 Provider 降级。
 
 ### Ollama
 

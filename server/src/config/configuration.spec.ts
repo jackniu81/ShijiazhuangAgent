@@ -8,6 +8,8 @@ describe('buildAppConfig 默认值与开关(issue #9 相关)', () => {
     expect(c.chat.historyTurns).toBe(6);
     expect(c.chat.sessionTtlMs).toBe(30 * 60_000);
     expect(c.chat.questionMaxLen).toBe(500);
+    // issue #27 实测上调:SiliconFlow 免费池 60s 会超时,默认 180s
+    expect(c.llm.timeoutMs).toBe(180000);
   });
 
   it('RAG_HYBRID=0 / false 关闭混合检索', () => {
