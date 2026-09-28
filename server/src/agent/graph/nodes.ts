@@ -1,3 +1,4 @@
+import { Logger } from '@nestjs/common';
 import {
   AgentEvents,
   AppErrorEvent,
@@ -9,14 +10,18 @@ import {
   PlanResultEvent,
   TravelPlan,
 } from '@shijiazhuang-agent/shared';
+import { LLMError } from '../llm/http';
 import { buildChatMessages } from '../prompts/chat.prompt';
-import { buildPlanMessages } from '../prompts/plan.prompt';
+import { buildPlanMessages, buildPlanRepairMessages } from '../prompts/plan.prompt';
 import { uniqueSources, uniqueTitles } from '../prompts/util';
 import { RetrievedDoc } from '../rag/rag.types';
 import { CancelledSignal, ChatState, GraphDeps, PlanState } from './graph.types';
+import { validatePlanJson } from './plan.schema';
 
 // prompt 模板已抽至 agent/prompts/(issue #10),此处 re-export 保持对外 API 不变
 export { buildChatMessages, buildPlanMessages };
+
+const logger = new Logger('PlanGraph');
 
 // ────────────────────────────────────────────────────────────
 // 通用:带进度上报 + 取消守卫的节点包装
@@ -99,17 +104,14 @@ export const nodes = {
     };
   },
 
-  /** 行程:mock 用代码依据 docs 组装;真模型改走 chat + parse。 */
+  /** 行程:mock 用代码依据 docs 组装;真模型走 chat + 校验(脏输出重试 1 次)。 */
   plan(deps: GraphDeps) {
     return async (state: PlanState) => {
       const plan = await tracked(deps, 'plan', '正在规划行程…', async () => {
-        let rawPlan: TravelPlan;
-        if (deps.llm.name === 'mock') {
-          rawPlan = assemblePlanFromDocs(state.input, state.docs);
-        } else {
-          const raw = await deps.llm.chat(buildPlanMessages(state.input, state.docs));
-          rawPlan = parsePlanJson(raw, state.input.days);
-        }
+        const rawPlan =
+          deps.llm.name === 'mock'
+            ? assemblePlanFromDocs(state.input, state.docs)
+            : await planWithRepair(deps, state);
         // 逐天流式 emit:plan:day 让前端提前看到部分行程
         await emitPlanDays(deps, rawPlan);
         return rawPlan;
@@ -224,17 +226,38 @@ export function assemblePlanFromDocs(input: PlanState['input'], docs: RetrievedD
   };
 }
 
-export function parsePlanJson(raw: string, expectedDays: number): TravelPlan {
-  const json = extractJson(raw);
-  const parsed = JSON.parse(json) as TravelPlan;
-  return refinePlan(parsed, expectedDays);
+/**
+ * 真模型行程:输出先过 schema,不合法则带错误原因回炉重试 1 次。
+ * 仍不合法时抛 LLMError,由 service 收敛为可读的 app:error(LLM_ERROR),
+ * 具体校验原因只进日志,不外泄给客户端。
+ */
+async function planWithRepair(deps: GraphDeps, state: PlanState): Promise<TravelPlan> {
+  const first = await deps.llm.chat(buildPlanMessages(state.input, state.docs));
+  const checked = validatePlanJson(first, state.input.days);
+  if (checked.ok) return refinePlan(checked.plan, state.input.days);
+
+  recordPlanFormat('retry', checked.reasons);
+  guardCancel(deps);
+  const second = await deps.llm.chat(
+    buildPlanRepairMessages(state.input, state.docs, first, checked.reasons),
+  );
+  const rechecked = validatePlanJson(second, state.input.days);
+  if (rechecked.ok) return refinePlan(rechecked.plan, state.input.days);
+
+  recordPlanFormat('fail', rechecked.reasons);
+  throw new LLMError('模型返回的行程格式有误,已自动重试仍未成功,请稍后重试。', false);
 }
 
-function extractJson(raw: string): string {
-  const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(raw);
-  if (fenced) return fenced[1].trim();
-  const brace = /[\[{][\s\S]*[\]}]/.exec(raw);
-  return (brace ? brace[0] : raw).trim();
+/** 累计计数写进日志行,`grep plan 输出格式校验 | tail -1` 即得当前格式漂移率。 */
+const planFormatStats = { retries: 0, failures: 0 };
+
+function recordPlanFormat(stage: 'retry' | 'fail', reasons: string[]): void {
+  if (stage === 'retry') planFormatStats.retries += 1;
+  else planFormatStats.failures += 1;
+  logger.warn(
+    `plan 输出格式校验未通过(${stage},累计 retry=${planFormatStats.retries} fail=${planFormatStats.failures}): ` +
+      reasons.join('; '),
+  );
 }
 
 /** 规整:天数对齐、day 序号连续、兜底字段。 */

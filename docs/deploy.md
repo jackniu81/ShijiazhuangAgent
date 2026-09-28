@@ -89,13 +89,13 @@ docker compose down                     # 停容器,保留命名卷
 issue #36 范围里的会话上限、对话日志看板,以及 MS-005 的剩余 blocker 还没做:
 
 - **CI 流水线**:`build-test` + `docker` 两个 job 的配置已写好,但推送被 GitHub 拒绝——当前 Personal Access Token 缺少 `workflow` scope,不允许创建/更新 `.github/workflows/*`。给 token 补权限后单独 PR 入库
-- #59 plan JSON 输出校验加固(坏 JSON 会让 plan 结果不完整)
 - #29 pgvector 持久化(启用后把 compose 的 postgres 转为 app 默认依赖)
 - 对话日志采集与效果看板
 
 已落地的上线项:
 - ✅ #61 Socket.IO 连接鉴权——`WS_TOKEN` 配置见第 3.1 节(公网部署务必设置)
 - ✅ #62 WebSocket 请求限流——阈值 `WS_MAX_CONCURRENT_PER_SESSION` / `WS_RATE_LIMIT_PER_WINDOW`,默认宽松
+- ✅ #59 plan JSON 校验加固——模型输出先过 zod schema,不合法带错误原因回炉重试 1 次,仍失败只发可读 `LLM_ERROR`;格式漂移计数看日志行 `plan 输出格式校验未通过`
 
 **在 `WS_TOKEN` 未设置之前,当前编排仍只适合内网/演示,不建议直接公网暴露。**
 
