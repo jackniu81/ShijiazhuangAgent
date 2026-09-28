@@ -28,6 +28,9 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+      # client 侧 token 构建期烘焙(issue #61),与下面 server 运行时取值须一致
+      args:
+        WS_TOKEN: ${WS_TOKEN:-}
     image: shijiazhuang-agent:latest
     container_name: shijiazhuang-agent-app
     restart: unless-stopped
@@ -52,6 +55,8 @@ services:
       CHAT_HISTORY_TURNS: ${CHAT_HISTORY_TURNS:-6}
       CHAT_SESSION_TTL_MS: ${CHAT_SESSION_TTL_MS:-1800000}
       CHAT_QUESTION_MAX: ${CHAT_QUESTION_MAX:-500}
+      # 连接鉴权(issue #61):留空 = 不鉴权(仅适合本机 demo);上线必须设置
+      WS_TOKEN: ${WS_TOKEN:-}
     volumes:
       # 语料以只读方式挂载:换语料不必重建镜像
       - ./data:/app/data:ro

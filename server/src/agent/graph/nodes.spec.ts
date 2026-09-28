@@ -1,3 +1,14 @@
+/** jest-runtime 无法 require @nestjs/* 纯 ESM 包(同 llm.factory.spec.ts),故打桩 Logger 并收集 warn。 */
+const warns: string[] = [];
+jest.mock('@nestjs/common', () => ({
+  Logger: class {
+    log(): void {}
+    warn(msg: string): void {
+      warns.push(msg);
+    }
+  },
+}));
+
 import { AgentEvents, AppErrorEvent, PlanDayEvent } from '@shijiazhuang-agent/shared';
 import { LLMProvider } from '../llm/llm.types';
 import { AppConfig } from '../../config/configuration';
@@ -178,5 +189,123 @@ describe('nodes.plan 流式 emitPlanDays', () => {
     const errs = d.emitted.filter((e: any) => e.event === AgentEvents.APP_ERROR);
     expect(errs).toHaveLength(1);
     expect((errs[0].data as AppErrorEvent).code).toBe('CANCELLED');
+  });
+});
+
+// ────────────────────────────────────────────────────────────
+// nodes.plan 真模型脏输出加固:schema 校验 + 回炉重试 1 次(issue #59)
+// ────────────────────────────────────────────────────────────
+
+const VALID_PLAN_JSON = JSON.stringify({
+  title: '石家庄 2 日游',
+  days: [
+    { day: 1, items: [{ title: '河北博物院' }] },
+    { day: 2, items: [{ title: '正定古城' }] },
+  ],
+});
+
+/** 按调用次序返回预设输出的 fake provider,同时留下每次的 messages 供断言。 */
+function makeScriptedPlanDeps(outputs: string[], over: { isCancelled?: () => boolean } = {}): any {
+  const d = makeDeps({ isCancelled: over.isCancelled ?? (() => false), signal: new AbortController().signal });
+  const calls: Array<{ role: string; content: string }[]> = [];
+  let i = 0;
+  d.llm = {
+    name: 'fake',
+    chat: async (msgs: { role: string; content: string }[]) => {
+      calls.push(msgs);
+      const out = outputs[Math.min(i, outputs.length - 1)];
+      i += 1;
+      return out;
+    },
+  } as unknown as LLMProvider;
+  (d as any).calls = calls;
+  return d;
+}
+
+const planState = (days = 2): PlanState => ({ input: { days }, docs: [] }) as PlanState;
+
+describe('nodes.plan 输出校验与自动重试 (#59)', () => {
+  beforeEach(() => {
+    warns.splice(0, warns.length);
+  });
+  it('首次即合法 → 只请求模型一次,行程按需求天数规整', async () => {
+    const d = makeScriptedPlanDeps([VALID_PLAN_JSON]);
+    const res = await nodes.plan(d)(planState());
+    expect(d.calls).toHaveLength(1);
+    expect(res.plan.days).toHaveLength(2);
+  });
+
+  it('脏输出 → 带具体错误原因回炉重试 1 次并成功', async () => {
+    const d = makeScriptedPlanDeps(['抱歉,行程如下(非 JSON)', VALID_PLAN_JSON]);
+    const res = await nodes.plan(d)(planState());
+
+    expect(d.calls).toHaveLength(2);
+    expect(res.plan.days).toHaveLength(2);
+    const repair = d.calls[1].map((m: any) => m.content).join('\n');
+    expect(repair).toContain('未通过结构校验');
+    expect(repair).toContain('不是合法 JSON');
+    // 上次脏输出原样回喂,让模型定点修而非重新发挥
+    expect(repair).toContain('抱歉,行程如下(非 JSON)');
+  });
+
+  it('天数超出需求也算脏输出,回炉提示要求按需求天数重出', async () => {
+    const oneDay = JSON.stringify({ title: '石家庄 1 日游', days: [{ items: [{ title: '河北博物院' }] }] });
+    const d = makeScriptedPlanDeps([VALID_PLAN_JSON, oneDay]);
+    const res = await nodes.plan(d)(planState(1));
+
+    expect(d.calls).toHaveLength(2);
+    expect(res.plan.days).toHaveLength(1);
+    const repair = d.calls[1].map((m: any) => m.content).join('\n');
+    expect(repair).toContain('请按 1 天');
+  });
+
+  it('校验通过前不逐日推流,重试成功后才发 plan:day', async () => {
+    const d = makeScriptedPlanDeps(['not json', VALID_PLAN_JSON]);
+    await nodes.plan(d)(planState());
+    const names: string[] = d.emitted.map((e: any) => e.event as string);
+    const planStart = names.findIndex(
+      (n, i) =>
+        n === AgentEvents.PLAN_PROGRESS &&
+        (d.emitted[i].data as any).node === 'plan' &&
+        (d.emitted[i].data as any).status === 'start',
+    );
+    const dayPositions = names
+      .map((n, i) => (n === AgentEvents.PLAN_DAY ? i : -1))
+      .filter((i) => i >= 0);
+    expect(dayPositions).toHaveLength(2);
+    expect(Math.min(...dayPositions)).toBeGreaterThan(planStart);
+  });
+
+  it('两次都脏 → 抛 LLMError,用户侧只见可读文案,不含解析细节', async () => {
+    const d = makeScriptedPlanDeps(['我无法规划', '{"days":[]}']);
+    await expect(nodes.plan(d)(planState())).rejects.toMatchObject({
+      name: 'LLMError',
+      message: '模型返回的行程格式有误,已自动重试仍未成功,请稍后重试。',
+    });
+    expect(planDaysOf(d)).toHaveLength(0);
+    // 具体校验原因进日志,便于统计格式漂移
+    expect(warns.join('\n')).toContain('不是合法 JSON');
+  });
+
+  it('重试前才取消 → 抛 CancelledSignal,不再请求模型第二次', async () => {
+    let cancelled = false;
+    const d = makeScriptedPlanDeps(['not json', VALID_PLAN_JSON], { isCancelled: () => cancelled });
+    const chat = d.llm.chat.bind(d.llm);
+    // 首次请求拿到脏输出之后才取消(等价于模型往返之间用户点了停止)
+    d.llm.chat = async (msgs: never, opts?: never) => {
+      const out = await chat(msgs, opts);
+      cancelled = true;
+      return out;
+    };
+
+    await expect(nodes.plan(d)(planState())).rejects.toBeInstanceOf(CancelledSignal);
+    expect(d.calls).toHaveLength(1);
+  });
+
+  it('mock provider 仍走代码组装,不进校验链路', async () => {
+    const d = makeMockPlanDeps({ isCancelled: () => false });
+    const res = await nodes.plan(d)(planState());
+    expect(res.plan.days).toHaveLength(2);
+    expect(planDaysOf(d)).toHaveLength(2);
   });
 });

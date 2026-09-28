@@ -58,6 +58,16 @@ docker compose ps ; docker compose logs -f app
 | `OLLAMA_BASE_URL` | `http://ollama:11434` | 容器内服务名;连宿主机 Ollama 改 `http://host.docker.internal:11434` |
 | `DATA_DIR` | 镜像内 `/app/data` | 语料目录,compose 已用只读卷覆盖 |
 | `APP_PORT` | `3000` | 宿主映射端口 |
+| `WS_TOKEN` | 空(不鉴权) | Socket.IO 连接鉴权静态 token(issue #61),见下文第 3.1 节 |
+
+### 3.1 连接鉴权(issue #61,R1)
+
+`/agent` namespace 握手段校验静态 Bearer token:server 读 `WS_TOKEN`,client 连接时经 `client.auth.token` 携带(构建期 `VITE_WS_TOKEN` 注入)。两者必须一致,否则握手被拒、界面显示"未授权"。
+
+- **留空 = 不鉴权**:开发默认,启动日志会打 warn 提醒;公网部署必须设置为随机字符串(`openssl rand -hex 24` 之类)
+- **Docker 是构建期烘焙**:compose 已把 `WS_TOKEN` 同时传给 build arg(client)与容器 environment(server),改 token 后需 `up -d --build` 重建镜像才生效
+- **本地开发**:server 用 `server/.env` 的 `WS_TOKEN`,client 复制 `client/.env.example` 为 `client/.env.local` 填同名值(两侧都重启/重跑 vite)
+- **定位**:浏览器端 token 必然可见,这层只防"任何人连上来刷 LLM 额度",不是访问控制;真正的用户体系(JWT)待用户系统再议(见 issue #61)
 
 ## 4. 运维动作
 
@@ -76,16 +86,18 @@ docker compose down                     # 停容器,保留命名卷
 
 ## 5. 上线前必须补的口子(尚未实现)
 
-issue #36 范围里的限流/会话上限、对话日志看板,以及 MS-005 的两个 blocker 都还没做:
+issue #36 范围里的会话上限、对话日志看板,以及 MS-005 的剩余 blocker 还没做:
 
 - **CI 流水线**:`build-test` + `docker` 两个 job 的配置已写好,但推送被 GitHub 拒绝——当前 Personal Access Token 缺少 `workflow` scope,不允许创建/更新 `.github/workflows/*`。给 token 补权限后单独 PR 入库
-- #61 Socket.IO 连接鉴权(现在任何人可连并消耗 LLM 额度)
-- #62 WebSocket 请求限流
-- #59 plan JSON 输出校验加固(坏 JSON 会让 plan 结果不完整)
 - #29 pgvector 持久化(启用后把 compose 的 postgres 转为 app 默认依赖)
 - 对话日志采集与效果看板
 
-**因此当前编排只适合内网/演示,不建议直接公网暴露。**
+已落地的上线项:
+- ✅ #61 Socket.IO 连接鉴权——`WS_TOKEN` 配置见第 3.1 节(公网部署务必设置)
+- ✅ #62 WebSocket 请求限流——阈值 `WS_MAX_CONCURRENT_PER_SESSION` / `WS_RATE_LIMIT_PER_WINDOW`,默认宽松
+- ✅ #59 plan JSON 校验加固——模型输出先过 zod schema,不合法带错误原因回炉重试 1 次,仍失败只发可读 `LLM_ERROR`;格式漂移计数看日志行 `plan 输出格式校验未通过`
+
+**在 `WS_TOKEN` 未设置之前,当前编排仍只适合内网/演示,不建议直接公网暴露。**
 
 ## 6. 质量回归与容器的配合
 

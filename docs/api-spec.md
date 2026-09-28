@@ -7,6 +7,7 @@
 - **协议**:Socket.IO(NestJS `@nestjs/websockets` + `socket.io`)
 - **地址**:与 HTTP 服务同源,`ws://localhost:3000/ws`(namespace:`/agent`)
 - 开发模式下 Vite 代理 `/ws` 到 server,生产模式同域,无需额外配置
+- **连接鉴权**(issue #61):握手时经 `socket.io` 的 `auth: { token }` 携带静态令牌,server 在 `/agent` namespace middleware 校验(环境变量 `WS_TOKEN`,client 构建期 `VITE_WS_TOKEN`)。校验失败以 `connect_error`(code=`UNAUTHORIZED`)拒绝,连接根本建立;`WS_TOKEN` 留空则不鉴权(仅开发用途)
 - 事件名采用 `域:动作` 小写冒号分隔,如 `plan:create`
 
 ## 2. 通用约定
@@ -128,6 +129,9 @@ interface AppErrorEvent {
 
 > `RATE_LIMITED`(issue #62):请求超过限流阈值(每会话并发数 / 每 IP·会话滑动窗口速率)时返回,
 > 阈值见 `server/.env.example` 的 `WS_MAX_CONCURRENT_PER_SESSION` / `WS_RATE_LIMIT_PER_WINDOW`。
+
+> `LLM_ERROR` 的一种来源(issue #59):模型返回的 plan JSON 未通过结构校验时,服务端带错误原因自动回炉重试
+> 1 次;仍不合法才发此事件。具体的校验细节只进服务端日志,不会出现在 message 里。
 
 ## 5. 交互时序
 
