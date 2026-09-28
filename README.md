@@ -2,6 +2,17 @@
 
 基于 LangGraph + RAG + LLM 的石家庄旅游智能助手，支持**行程规划**和**自由问答**两种模式。
 
+## 功能子系统
+
+项目包含 **2 个功能子系统**（各自拥有独立业务入口与实现边界）：
+
+| 子系统 | WebSocket 入口 | 实现边界 |
+|--------|---------------|----------|
+| **行程规划** | `plan:create` / `plan:cancel` | `plan.graph.ts`(retrieve → planStep → refine → done)+ PlanningForm + PlanCard |
+| **自由问答** | `chat:ask` / `chat:cancel` | `chat.graph.ts`(retrieve → generate)+ ChatWindow + MessageList |
+
+其余模块均为交互层或支撑能力，不单独计为业务子系统：client(前端交互层)、packages/shared(WS 契约类型)、server RAG(检索支撑)、server LLM Provider(模型接入支撑)、session.store(会话历史支撑)。
+
 ## 架构
 
 ```
@@ -100,7 +111,6 @@ data/                          # 共 21 篇
 | [docs/llm-providers.md](docs/llm-providers.md) | LLM Provider 切换 / 环境变量 / 回退降级策略 / 端到端验收记录 |
 | [docs/deploy.md](docs/deploy.md) | 部署与运维：镜像 / Docker Compose / 环境变量 / 上线待补清单 |
 | [docs/roadmap.md](docs/roadmap.md) | **今后发展规划**：pgvector 选型 / 真实 LLM / 差异化策略 / 里程碑 MS-005、MS-006 |
-| [require.md](require.md) | 原始需求 |
 
 **📦 已归档**（docs/archive/，历史设计/评审快照，仅供追溯，当前状态以代码为准）
 
