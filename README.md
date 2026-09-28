@@ -2,16 +2,20 @@
 
 基于 LangGraph + RAG + LLM 的石家庄旅游智能助手，支持**行程规划**和**自由问答**两种模式。
 
-## 功能子系统
+## 核心功能
 
-项目包含 **2 个功能子系统**（各自拥有独立业务入口与实现边界）：
+按**业务能力**（非代码包/技术组件）划分，每项功能均有独立业务入口与业务边界：
 
-| 子系统 | WebSocket 入口 | 实现边界 |
-|--------|---------------|----------|
-| **行程规划** | `plan:create` / `plan:cancel` | `plan.graph.ts`(retrieve → planStep → refine → done)+ PlanningForm + PlanCard |
-| **自由问答** | `chat:ask` / `chat:cancel` | `chat.graph.ts`(retrieve → generate)+ ChatWindow + MessageList |
+| # | 功能 | 业务入口 | 一句话理由（独立入口 + 业务边界） |
+|---|-----------|---------|--------------------------------|
+| 1 | **行程规划** | WS `plan:create`，回推 `plan:progress` / `plan:day` / `plan:result` | 用户填天数、兴趣偏好即可单独获得逐日流式行程，有专属状态图(retrieve → planStep → refine → done)与专属表单/卡片组件，业务边界完整 |
+| 2 | **自由问答** | WS `chat:ask`，回推 `chat:token` / `chat:done` | 多轮自然语言咨询可单独对外提供答疑能力，有独立的状态图(retrieve → generate)与历史上下文携带，与行程规划职责不同 |
+| 3 | **任务管控** | WS `task:cancel` + 统一错误事件 `app:error` | 流式生成可随时中断(按 requestId 取消/abort)，异常统一收敛为错误契约并支撑前端一键重试，是跨两条业务链路的独立管控能力 |
+| 4 | **会话服务** | 连接建立与 sessionId 契约(客户端 sessionStorage 持久化) | 独立管理多轮会话生命周期：会话创建/恢复、历史上下文携带、TTL 清理、IP+会话双维度限流(#62)与连接鉴权(#61)，去掉它多轮能力即失效 |
+| 5 | **旅游知识库** | `data/` 6 分类 21 篇语料 + front-matter 元数据，启动时自动构建索引 | 景点/美食/酒店/交通/线路/特产是独立运营的业务数据资产，有专属内容结构与时效规范，单独支撑所有业务链路的领域知识供给 |
+| 6 | **运维支持** | HTTP `GET /version` + 连接状态契约 | 向外部提供版本探测与部署运维能力，有独立 Controller，与对话业务完全正交 |
 
-其余模块均为交互层或支撑能力，不单独计为业务子系统：client(前端交互层)、packages/shared(WS 契约类型)、server RAG(检索支撑)、server LLM Provider(模型接入支撑)、session.store(会话历史支撑)。
+**技术支撑层（不计为业务功能）**：前端客户端(交互层)、`packages/shared`(WS 契约类型)、RAG 检索引擎(BM25+向量+RRF，为 #1/#2/#5 服务的算法实现)、LLM Provider 抽象(mock/siliconflow/ollama，模型接入实现)、LangGraph(图编排框架)。
 
 ## 架构
 
@@ -35,7 +39,7 @@
 - ⏹ **停止生成**:流式输出中可随时中断
 - ⚠️ **错误提示 + 一键重试**:LLM/RAG 异常时自动 toast 提示，支持重试
 - 🔄 **断线自动重连**:Socket.IO 内置重连机制
-- 💾 **Session 持久化**:刷新页面保持对话会话
+- 💾 **Session 持久化**:刷新页面保持对话会话（客户端 sessionStorage 存会话 ID；服务端会话历史当前为进程内内存 Map，服务重启后不保留，持久化归属 #29，一致性维护约定见 [#84](https://github.com/jackniu81/ShijiazhuangAgent/issues/84)）
 
 ## 快速开始
 
@@ -131,9 +135,9 @@ server/                       # NestJS 12 + LangGraph 后端
 │   ├── graph/                # chat.graph + plan.graph + nodes(含 plan:day 流式)
 │   ├── prompts/              # chat.prompt + plan.prompt 模板
 │   ├── rag/                  # BM25 + 向量混合检索,RRF 融合 + rerank
-│   ├── chat/                 # session.store 会话历史 (TTL 自动清理)
+│   ├── chat/                 # session.store 会话历史（进程内内存 + TTL 自动清理，重启不保留，持久化属 #29）
 │   └── llm/                  # Provider 抽象:mock / siliconflow / ollama
-└── 单测: jest 11 suites / 68 tests
+└── 单测: jest 17 suites / 140 tests
 client/                       # React 19 + Vite + Tailwind CSS 4 前端
 └── src/
     ├── components/
@@ -162,7 +166,7 @@ docs/                         # 现势: api-spec / roadmap;archive/: 已归档�
 
 - [x] Server: LangGraph 双图 + RAG 混合检索 + 会话历史 + SiliconFlow/Ollama Provider + 逐天流式 plan:day
 - [x] Client: ChatWindow + PlanningForm + 全组件 + 断线重连 + 错误 toast + 一键重试 + sessionId 持久化
-- [x] 工程: @shijiazhuang-agent/shared 类型包 + server 68 / client 43 单测 + 21 篇分类语料
+- [x] 工程: @shijiazhuang-agent/shared 类型包 + server 140 / client 43 单测 + 21 篇分类语料
 
 **进行中里程碑**（详情见 [docs/roadmap.md](docs/roadmap.md)）
 
