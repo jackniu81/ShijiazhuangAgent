@@ -8,10 +8,6 @@
 
 | 指标 | 数值 |
 |------|------|
-| 业务代码 | ~4.8k 行 TS（server + client + shared，不含测试） |
-| 单元测试 | server **20 suites / 193 tests**（jest）· client **7 files / 43 tests**（vitest） |
-| 测试文件 | 21 个，与源码**同目录** colocate（`*.spec.ts`） |
-| 领域语料 | 6 分类 21 篇 markdown，启动时自动建索引 |
 | LLM 后端 | 3 个可互换 Provider（mock / siliconflow / ollama），一个 env 切换 |
 | 向量后端 | 2 个可互换实现（内存 / pgvector），由契约测试锁定可替换性 |
 | 部署 | 单镜像（server 同端口托管 client 静态资源，WS 同源）+ Docker Compose 可选 Ollama/postgres |
