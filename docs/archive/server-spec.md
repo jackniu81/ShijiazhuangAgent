@@ -2,7 +2,7 @@
 
 > 本 session 聚焦 Server。本文件是 **task #2(server implement)** 的设计蓝图,覆盖 require.md 6-11 的五点要求,并与 [api-spec.md](../api-spec.md) 的事件契约严格对齐。当前 `agent.service.ts` 为 mock,本文档定义其真实实现形态。
 >
-> 📦 **已归档**（2026-09-26）:本文档为 task #2 当时的设计快照,所述“真实实现形态”已全部落地(mock/siliconflow/ollama 三 Provider、BM25+向量混合检索、会话历史均已完成);当前状态以代码为准,今后规划见 [roadmap.md](../roadmap.md)。
+> 📦 **已归档**（2026-09-26）:本文档为 task #2 当时的设计快照,所述“真实实现形态”已全部落地(mock/siliconflow/ollama 三 Provider、BM25+向量混合检索、会话历史均已完成);当前状态以代码为准,进度与剩余工作见 [docs/todo.md](../todo.md)。
 
 ## 1. 目标与范围
 

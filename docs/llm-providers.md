@@ -116,6 +116,6 @@ npm run start -w server
 
 ## 4. 已知限制
 
-- mock provider 的 emit 间隔 300ms 硬编码（roadmap 已记录，待配置化）
+- mock provider 的 emit 间隔 300ms 硬编码（原 roadmap 第五节已记录，待配置化）
 - SiliconFlow 免费额度限 QPM，压测场景需换付费 Key
 - `ollama` 启动期不做健康检查，报错延迟到首次请求（改进候选：#59 启动探测）
