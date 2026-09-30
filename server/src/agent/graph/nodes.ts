@@ -11,6 +11,7 @@ import {
   TravelPlan,
 } from '@shijiazhuang-agent/shared';
 import { LLMError } from '../llm/http';
+import { Msg } from '../llm/llm.types';
 import { buildChatMessages } from '../prompts/chat.prompt';
 import { buildPlanMessages, buildPlanRepairMessages } from '../prompts/plan.prompt';
 import { uniqueSources, uniqueTitles } from '../prompts/util';
@@ -94,8 +95,12 @@ export const nodes = {
     const emitProgress = opts.emitProgress ?? true;
     return async (state: PlanState & ChatState) => {
       const query = state.question
-        ? `${state.question} 石家庄 旅游`
+        ? rewriteRetrieveQuery(state.question, state.history)
         : planQuery(state.input);
+      // 追问改写生效时记录最终 query,便于排查指代消解效果(issue #88)
+      if (state.question && (state.history?.length ?? 0) > 0) {
+        logger.log(`retrieve query 改写: "${state.question}" → "${query}"`);
+      }
       const search = () => deps.retrieve(query, deps.config.rag.topK);
       const docs = emitProgress
         ? await tracked(deps, 'retrieve', '正在检索景点资料…', search)
@@ -198,6 +203,25 @@ function planQuery(input: PlanState['input']): string {
     '旅游 行程 景点',
   ];
   return parts.filter(Boolean).join(' ');
+}
+
+/** 追问改写取最近几条 user 消息(issue #88 方案 A):1 条足够定位指代,再多会稀释检索主题。 */
+const REWRITE_USER_TURNS = 1;
+/** 单条历史消息的拼接长度上限,防止长回答占满检索预算。 */
+const REWRITE_TURN_MAX_CHARS = 30;
+
+/**
+ * 问答检索 query 改写(issue #88):history 非空时把最近一轮 user 消息
+ * 拼在当前 question 前,让"它门票多少钱"这类追问能命中上一轮话题(正定古城)的资料。
+ */
+export function rewriteRetrieveQuery(question: string, history?: Msg[]): string {
+  const base = `${question} 石家庄 旅游`;
+  const recent = (history ?? []).filter((m) => m.role === 'user').slice(-REWRITE_USER_TURNS);
+  const keyword = recent
+    .map((m) => m.content.replace(/\s+/g, ' ').trim().slice(0, REWRITE_TURN_MAX_CHARS))
+    .filter(Boolean)
+    .join(' ');
+  return keyword ? `${keyword} ${base}` : base;
 }
 
 export function assemblePlanFromDocs(input: PlanState['input'], docs: RetrievedDoc[]): TravelPlan {
