@@ -26,6 +26,11 @@ const ChatAnnotation = Annotation.Root({
     reducer: (_prev, next) => next,
     default: () => undefined,
   }),
+  // 阈值全过滤标记(issue #89),retrieve → generate 传递
+  filteredEmpty: Annotation<boolean | undefined>({
+    reducer: (_prev, next) => next,
+    default: () => false,
+  }),
 });
 
 /** retrieve → generate → END */

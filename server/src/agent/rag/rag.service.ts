@@ -5,6 +5,7 @@ import { APP_CONFIG, AppConfig } from '../../config/configuration';
 import { LLM_PROVIDER } from '../llm/llm.factory';
 import { LLMProvider } from '../llm/llm.types';
 import { buildIndexFromDir } from './indexer';
+import { filterByCosine } from './fusion';
 import { PgVectorStore, PgQueryable } from './pg-vector.store';
 import { RetrievedDoc, VectorStore } from './rag.types';
 import { InMemoryVectorStore } from './store';
@@ -80,8 +81,14 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
   async retrieve(query: string, k = this.config.rag.topK): Promise<RetrievedDoc[]> {
     if (this.store.size === 0) return [];
     const embedder = (texts: string[]) => this.llm.embed(texts);
+    const { minScore } = this.config.rag;
     try {
-      return await this.store.searchByText(query, embedder, k);
+      const docs = await this.store.searchByText(query, embedder, k);
+      if (!(minScore > 0) || !docs.length) return docs;
+      // 相关度阈值过滤(issue #89):一次批量向量化,按余弦分剔除低分文档
+      const vectors = await embedder([query, ...docs.map((d) => d.text)]);
+      const [queryVec, ...docVecs] = vectors;
+      return filterByCosine(docs, queryVec, docVecs, minScore);
     } catch (err) {
       // 查询期 embedding 失败:降级返回空结果,不阻断回答
       this.degraded = true;

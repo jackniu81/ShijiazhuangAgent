@@ -1,4 +1,5 @@
-import { DocMeta } from './rag.types';
+import { cosineSimilarity } from './math';
+import { DocMeta, RetrievedDoc } from './rag.types';
 
 /**
  * 混合检索融合与规则 rerank(issue #9)。
@@ -36,4 +37,19 @@ export function metaBoostScore(query: string, meta: DocMeta): number {
   }
   if (meta.region && query.includes(meta.region)) boost += REGION_BONUS;
   return boost;
+}
+
+/**
+ * 相关度阈值过滤(issue #89)。
+ * 融合分是 RRF 量纲(~0.016–0.033)、纯向量分是余弦量纲,二者不可共用一个阈值,
+ * 故统一以"query 向量 vs 文档向量"的余弦重算分为口径(对应 issue 方案"统一以 rerank 余弦分为准")。
+ * 向量按文本现算,后端无关;分数低于 minScore 的文档剔除,全部被剔除即"无资料"。
+ */
+export function filterByCosine(
+  docs: RetrievedDoc[],
+  queryVec: number[],
+  docVecs: number[][],
+  minScore: number,
+): RetrievedDoc[] {
+  return docs.filter((_, i) => cosineSimilarity(queryVec, docVecs[i] ?? []) >= minScore);
 }

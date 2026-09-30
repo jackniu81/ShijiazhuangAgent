@@ -32,6 +32,8 @@ export interface AppConfig {
     chunkOverlap: number;
     /** BM25 + 向量混合检索(RRF 融合),issue #9,默认开 */
     hybrid: boolean;
+    /** 检索相关度下限(余弦口径,0=关闭),issue #89 */
+    minScore: number;
     /** 向量存储后端:memory(默认) | pgvector(issue #29) */
     backend: RagBackend;
     /** pgvector 连接串(DATABASE_URL),backend=pgvector 时必填 */
@@ -116,6 +118,8 @@ export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig 
       chunkSize: int(env.RAG_CHUNK_SIZE, 500),
       chunkOverlap: int(env.RAG_CHUNK_OVERLAP, 50),
       hybrid: bool(env.RAG_HYBRID, true),
+      // 阈值口径为 query/文档余弦分,量纲与模型相关,默认 0=关闭,标定后显式开启(issue #89)
+      minScore: num(env.RAG_MIN_SCORE, 0),
       backend: ragBackend(env.RAG_STORE_BACKEND),
       databaseUrl: env.DATABASE_URL ?? '',
       vectorDim: int(env.RAG_VECTOR_DIM, 1024),

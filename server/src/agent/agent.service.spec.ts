@@ -49,6 +49,7 @@ function makeConfig(over: Partial<AppConfig['llm']> & Partial<AppConfig['chat']>
       chunkSize: 500,
       chunkOverlap: 50,
       hybrid: false,
+      minScore: 0,
       backend: 'memory',
       databaseUrl: '',
       vectorDim: 1024,

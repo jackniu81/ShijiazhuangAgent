@@ -11,6 +11,7 @@ jest.mock('@nestjs/common', () => ({
 
 import { AgentEvents, AppErrorEvent, PlanDayEvent } from '@shijiazhuang-agent/shared';
 import { LLMProvider } from '../llm/llm.types';
+import { RetrievedDoc } from '../rag/rag.types';
 import { AppConfig } from '../../config/configuration';
 import { nodes, rewriteRetrieveQuery } from './nodes';
 import { CancelledSignal, ChatState, GraphDeps, PlanState } from './graph.types';
@@ -37,7 +38,7 @@ function makeDeps(over: { isCancelled: () => boolean; signal: AbortSignal }): Gr
   const config = {
     chat: { historyTurns: 6, temperature: 0.7, maxTokens: 2048 },
     plan: { temperature: 0.2, maxTokens: 4096 },
-    rag: { topK: 5 },
+    rag: { topK: 5, minScore: 0 },
   } as unknown as AppConfig;
 
   const deps: GraphDeps = {
@@ -371,6 +372,77 @@ describe('nodes.retrieve 追问 query 改写 (#88)', () => {
     const planStateInput = { input: { days: 2, interests: ['人文'] }, docs: [] } as unknown as PlanState & ChatState;
     await nodes.retrieve(d, { emitProgress: false })(planStateInput);
     expect(d.queries).toEqual(['石家庄 人文 旅游 行程 景点']);
+  });
+});
+
+// ────────────────────────────────────────────────────────────
+// 相关度阈值过滤(issue #89):全过滤 → filteredEmpty 标记与无资料提示
+// ────────────────────────────────────────────────────────────
+
+/** 可控检索结果 + minScore 的 retrieve deps。 */
+function makeFilterDeps(docs: RetrievedDoc[], minScore: number): any {
+  const d = makeDeps({ isCancelled: () => false, signal: new AbortController().signal }) as any;
+  d.retrieve = async () => docs;
+  d.config.rag.minScore = minScore;
+  return d;
+}
+
+const retrieved = (title: string): RetrievedDoc => ({
+  text: `${title}正文`,
+  source: `${title}.md`,
+  score: 0.03,
+  meta: { title, tags: [], source: `${title}.md` },
+});
+
+describe('nodes.retrieve 阈值全过滤 (issue #89)', () => {
+  it('minScore>0 且返回空 → filteredEmpty=true', async () => {
+    const res = await nodes.retrieve(makeFilterDeps([], 0.2), { emitProgress: false })(
+      chatState('今天股票涨了吗', []),
+    );
+    expect(res).toEqual({ docs: [], filteredEmpty: true });
+  });
+
+  it('minScore=0(关闭)时空结果不算全过滤,保持旧语义', async () => {
+    const res = await nodes.retrieve(makeFilterDeps([], 0), { emitProgress: false })(
+      chatState('随便问', []),
+    );
+    expect(res.filteredEmpty).toBe(false);
+  });
+
+  it('有命中 → filteredEmpty=false', async () => {
+    const res = await nodes.retrieve(makeFilterDeps([retrieved('正定古城')], 0.2), {
+      emitProgress: false,
+    })(chatState('正定好玩吗', []));
+    expect(res.filteredEmpty).toBe(false);
+    expect(res.docs).toHaveLength(1);
+  });
+});
+
+describe('nodes.generate 无资料注记 (issue #89)', () => {
+  const chatOnlyState = {
+    question: 'q',
+    sessionId: 's1',
+    history: [],
+    docs: [],
+  } as ChatState;
+
+  it('全过滤 → answer 注明"未检索到本地资料"', async () => {
+    const d = makeDeps({ isCancelled: () => false, signal: new AbortController().signal }) as any;
+    const res = await nodes.generate(d)({ ...chatOnlyState, filteredEmpty: true });
+    expect(res.answer).toContain('(注:未检索到本地资料,以上回答基于模型常识)');
+  });
+
+  it('索引降级 → 保持原文案"本地资料检索暂不可用"', async () => {
+    const d = makeDeps({ isCancelled: () => false, signal: new AbortController().signal }) as any;
+    d.ragDegraded = true;
+    const res = await nodes.generate(d)(chatOnlyState);
+    expect(res.answer).toContain('(注:本地资料检索暂不可用,以上回答基于模型常识)');
+  });
+
+  it('两者皆无 → 不加注记', async () => {
+    const d = makeDeps({ isCancelled: () => false, signal: new AbortController().signal }) as any;
+    const res = await nodes.generate(d)({ ...chatOnlyState, docs: [retrieved('正定古城')] });
+    expect(res.answer).not.toContain('注:');
   });
 });
 
