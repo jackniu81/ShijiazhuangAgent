@@ -35,7 +35,8 @@ function makeDeps(over: { isCancelled: () => boolean; signal: AbortSignal }): Gr
   } as unknown as LLMProvider;
 
   const config = {
-    chat: { historyTurns: 6 },
+    chat: { historyTurns: 6, temperature: 0.7, maxTokens: 2048 },
+    plan: { temperature: 0.2, maxTokens: 4096 },
     rag: { topK: 5 },
   } as unknown as AppConfig;
 
@@ -307,5 +308,51 @@ describe('nodes.plan 输出校验与自动重试 (#59)', () => {
     const res = await nodes.plan(d)(planState());
     expect(res.plan.days).toHaveLength(2);
     expect(planDaysOf(d)).toHaveLength(2);
+  });
+});
+
+// ────────────────────────────────────────────────────────────
+// 生成参数透传(issue #86):chat/plan 按场景下发 temperature/maxTokens
+// ────────────────────────────────────────────────────────────
+
+/** 在 makeDeps 基础上记录 stream 收到的 options(生成参数默认值见 makeDeps 的 config)。 */
+function makeChatParamDeps(): any {
+  const d = makeDeps({ isCancelled: () => false, signal: new AbortController().signal }) as any;
+  const streamOpts: unknown[] = [];
+  const orig = d.llm.stream.bind(d.llm);
+  d.llm.stream = (msgs: never, onToken: never, opts: never) => {
+    streamOpts.push(opts);
+    return orig(msgs, onToken, opts);
+  };
+  d.streamOpts = streamOpts;
+  return d;
+}
+
+describe('生成参数透传 (issue #86)', () => {
+  it('generate → llm.stream 收到 chat 场景的 temperature/maxTokens 与取消信号', async () => {
+    const d = makeChatParamDeps();
+    await nodes.generate(d)(state);
+    expect(d.streamOpts).toHaveLength(1);
+    expect(d.streamOpts[0]).toMatchObject({ temperature: 0.7, maxTokens: 2048 });
+    // signal 仍随 options 下发,取消/超时链路不受影响
+    expect((d.streamOpts[0] as any).signal).toBe(d.signal);
+  });
+
+  it('planWithRepair 两次调用均带 plan 场景低温参数', async () => {
+    const d = makeScriptedPlanDeps(['not json', VALID_PLAN_JSON]);
+    const chatOpts: unknown[] = [];
+    d.llm = {
+      name: 'fake',
+      chat: async (_msgs: unknown, opts?: unknown) => {
+        chatOpts.push(opts);
+        return chatOpts.length === 1 ? 'not json' : VALID_PLAN_JSON;
+      },
+    } as unknown as LLMProvider;
+
+    await nodes.plan(d)(planState());
+    // 首次 + 修复重试各一次,参数一致
+    expect(chatOpts).toHaveLength(2);
+    expect(chatOpts[0]).toEqual({ temperature: 0.2, maxTokens: 4096 });
+    expect(chatOpts[1]).toEqual(chatOpts[0]);
   });
 });

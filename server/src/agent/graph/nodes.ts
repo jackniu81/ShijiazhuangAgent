@@ -155,7 +155,12 @@ export const nodes = {
             token,
           });
         },
-        { signal: deps.signal },
+        // 生成参数透传(issue #86):温度与上限按场景配置,信号仍用于取消/超时中断
+        {
+          temperature: deps.config.chat.temperature,
+          maxTokens: deps.config.chat.maxTokens,
+          signal: deps.signal,
+        },
       );
       // 取消/超时会 abort 信号,分两种收尾:
       //  - 用户取消:经 guardCancel 上报 app:error(CANCELLED),让客户端立即复位;
@@ -232,7 +237,9 @@ export function assemblePlanFromDocs(input: PlanState['input'], docs: RetrievedD
  * 具体校验原因只进日志,不外泄给客户端。
  */
 async function planWithRepair(deps: GraphDeps, state: PlanState): Promise<TravelPlan> {
-  const first = await deps.llm.chat(buildPlanMessages(state.input, state.docs));
+  // plan 场景低温采样 + token 上限(issue #86),两次调用(首次/修复)参数一致
+  const opts = { temperature: deps.config.plan.temperature, maxTokens: deps.config.plan.maxTokens };
+  const first = await deps.llm.chat(buildPlanMessages(state.input, state.docs), opts);
   const checked = validatePlanJson(first, state.input.days);
   if (checked.ok) return refinePlan(checked.plan, state.input.days);
 
@@ -240,6 +247,7 @@ async function planWithRepair(deps: GraphDeps, state: PlanState): Promise<Travel
   guardCancel(deps);
   const second = await deps.llm.chat(
     buildPlanRepairMessages(state.input, state.docs, first, checked.reasons),
+    opts,
   );
   const rechecked = validatePlanJson(second, state.input.days);
   if (rechecked.ok) return refinePlan(rechecked.plan, state.input.days);
