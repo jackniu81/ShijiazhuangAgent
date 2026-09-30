@@ -42,6 +42,12 @@ npm run start -w server
 
 **运行期跨 Provider 降级链（siliconflow→ollama→mock）**：未实现，立项于 MS-005 #59。
 
+**生成级 JSON 强约束（issue #87 已实现，`ChatOptions.jsonMode`）**：
+
+- `plan` 的首次与修复重试两次 `chat` 均带 `jsonMode: true`，请求体层面保证输出可解析：siliconflow 注入 `response_format: { type: "json_object" }`，ollama 注入 `format: "json"`
+- 流式（`stream`）不注入——会破坏逐 token 增量返回，`chat` 问答链路维持纯文本
+- 强约束只保证"能 parse"，字段语义仍由 #59 的 zod 校验 + 回炉重试兜底，两层链路不变
+
 ## 3. 端到端验收记录
 
 验收脚本：`.qoder-e2e.mjs`（临时冒烟，已随验收完成后删除；可参照本文档 §1 手工复现）
@@ -84,9 +90,20 @@ npm run start -w server
 
 **限制**：本机无 embedding 模型（qwen3:1.7b 试作 embed 返回 500/501），启动时 RAG 索引构建失败→**优雅降级为无检索模式**（已实测降级路径工作正常：回答不带 sources，链路不断）。要解锁完整 RAG 需 `ollama pull bge-m3`；首次请求的 35s 冷启动载入可考虑生产环境预热或常驻。
 
-### 附：SiliconFlow 候选模型速度基准（2026-09-27，两轮采样）
+### jsonMode 强约束实测（qwen3:1.7b，2026-09-30，issue #87）
 
-同一问题（正定美食，限 100 字，流式）串行实测 TTFT/总耗时：
+同一 plan prompt（2 天，`temperature=0.2`）走真实 `/api/chat`，对照 `jsonMode` 开关各跑 3 轮：
+
+| | 整体可直接 `JSON.parse` | zod schema 通过 | 输出形态 | 平均耗时 |
+|---|---|---|---|---|
+| 不开 jsonMode | 3/3 | 3/3 | 多行缩进 JSON，偶带尾部空行 | ~14.4s |
+| jsonMode（`format: "json"`） | 3/3 | 2/3* | 紧凑单行 JSON，无代码块围栏 | ~12.1s |
+
+\* 那次未通过未记录具体原因，最可能是当日行程项超出冒烟脚本压到 2048 的 `maxTokens` 被截断（生产默认 4096）；随后补跑一轮 `maxTokens=1024` 时两侧均 2/2 通过。
+
+请求体带 `format: "json"` 被 Ollama 正常接受，输出稳定为紧凑单行 JSON（更省 token）；该模型本身配合度高，"脏 JSON 率下降"在这台机器上打不开差距，需换指令跟随更弱的模型或 SiliconFlow 免费池才可观。格式漂移率长期看服务端日志行 `plan 输出格式校验未通过` 的累计 retry/fail 计数。
+
+### 附：SiliconFlow 候选模型速度基准（2026-09-27，两轮采样）同一问题（正定美食，限 100 字，流式）串行实测 TTFT/总耗时：
 
 | 模型 | TTFT (s) | 总耗时 (s) | 评价 |
 |------|----------|-----------|------|
