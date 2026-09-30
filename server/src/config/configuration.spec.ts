@@ -17,6 +17,13 @@ describe('buildAppConfig 默认值与开关(issue #9 相关)', () => {
     expect(buildAppConfig({ RAG_MIN_SCORE: '0.35' }).rag.minScore).toBe(0.35);
   });
 
+  it('embed 批量条数(issue #93):默认 64,非法/非正值回退默认', () => {
+    expect(buildAppConfig({}).llm.ollama.embedBatchSize).toBe(64);
+    expect(buildAppConfig({ OLLAMA_EMBED_BATCH_SIZE: '16' }).llm.ollama.embedBatchSize).toBe(16);
+    expect(buildAppConfig({ OLLAMA_EMBED_BATCH_SIZE: '0' }).llm.ollama.embedBatchSize).toBe(64);
+    expect(buildAppConfig({ OLLAMA_EMBED_BATCH_SIZE: 'abc' }).llm.ollama.embedBatchSize).toBe(64);
+  });
+
   it('限流默认值(issue #62):并发 1 + 每分钟 30 次', () => {
     const c = buildAppConfig({});
     expect(c.rateLimit.maxConcurrentPerSession).toBe(1);

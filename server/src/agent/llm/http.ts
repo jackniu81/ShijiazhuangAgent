@@ -10,6 +10,8 @@ export class LLMError extends Error {
   constructor(
     message: string,
     readonly retryable = true,
+    /** HTTP 状态码;网络层/解析失败时为空,供调用方区分"接口不存在"与临时故障(issue #93)。 */
+    readonly status?: number,
   ) {
     super(message);
     this.name = 'LLMError';
@@ -80,7 +82,11 @@ export async function postJson(
     if (!res.ok) {
       const text = (await res.text().catch(() => '')).slice(0, 200);
       const retryable = res.status >= 500;
-      throw new LLMError(`LLM 服务返回错误(${res.status}),请稍后重试。${retryable ? '' : ''} ${text}`.trim(), retryable);
+      throw new LLMError(
+        `LLM 服务返回错误(${res.status}),请稍后重试。 ${text}`.trim(),
+        retryable,
+        res.status,
+      );
     }
     return await res.json();
   } catch (err) {
