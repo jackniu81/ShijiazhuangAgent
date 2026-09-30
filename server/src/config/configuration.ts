@@ -47,6 +47,15 @@ export interface AppConfig {
     sessionTtlMs: number;
     /** question 最大长度,超出报 INVALID_INPUT */
     questionMaxLen: number;
+    /** 生成采样温度(issue #86):问答场景兼顾流畅与事实性 */
+    temperature: number;
+    /** 单次回答的生成 token 上限(issue #86),防成本失控 */
+    maxTokens: number;
+  };
+  /** 行程生成参数(issue #86):plan 输出为结构化 JSON,需低温采样保稳定 */
+  plan: {
+    temperature: number;
+    maxTokens: number;
   };
   /** WebSocket 请求限流(issue #62):IP + 会话双维度 */
   rateLimit: {
@@ -70,6 +79,12 @@ const bool = (v: string | undefined, def: boolean): boolean =>
 const int = (v: string | undefined, def: number): number => {
   const n = Number(v);
   return Number.isFinite(n) ? n : def;
+};
+
+/** 数值参数:非有限值或 ≤0 视为未配置,回退默认(温度/上限都不允许 0 或负数)。 */
+const num = (v: string | undefined, def: number): number => {
+  const n = Number(v);
+  return Number.isFinite(n) && n > 0 ? n : def;
 };
 
 const provider = (v: string | undefined): LlmProviderName =>
@@ -110,6 +125,13 @@ export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig 
       historyTurns: int(env.CHAT_HISTORY_TURNS, 6),
       sessionTtlMs: int(env.CHAT_SESSION_TTL_MS, 30 * 60_000),
       questionMaxLen: int(env.CHAT_QUESTION_MAX, 500),
+      temperature: num(env.CHAT_TEMPERATURE, 0.7),
+      maxTokens: num(env.CHAT_MAX_TOKENS, 2048),
+    },
+    plan: {
+      // 行程 JSON 需要强确定性,低温采样(issue #86,建议 ≤ 0.3)
+      temperature: num(env.PLAN_TEMPERATURE, 0.2),
+      maxTokens: num(env.PLAN_MAX_TOKENS, 4096),
     },
     rateLimit: {
       maxConcurrentPerSession: int(env.WS_MAX_CONCURRENT_PER_SESSION, 1),

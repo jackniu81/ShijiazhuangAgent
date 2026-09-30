@@ -54,7 +54,14 @@ function makeConfig(over: Partial<AppConfig['llm']> & Partial<AppConfig['chat']>
       vectorDim: 1024,
       vectorTable: 'rag_chunks',
     },
-    chat: { historyTurns: 6, sessionTtlMs: 30 * 60_000, questionMaxLen: over.questionMaxLen ?? 500 },
+    chat: {
+      historyTurns: 6,
+      sessionTtlMs: 30 * 60_000,
+      questionMaxLen: over.questionMaxLen ?? 500,
+      temperature: 0.7,
+      maxTokens: 2048,
+    },
+    plan: { temperature: 0.2, maxTokens: 4096 },
     rateLimit: { maxConcurrentPerSession: 1, perWindow: 30, windowMs: 60_000 },
     wsAuth: { token: '' },
   };

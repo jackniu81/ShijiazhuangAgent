@@ -21,7 +21,12 @@ export class OllamaProvider implements LLMProvider {
     return withRetry(async () => {
       const json = await postJson(
         `${this.opts.baseUrl}/api/chat`,
-        { model: this.opts.chatModel, messages: toProviderMessages(messages), stream: false },
+        {
+          model: this.opts.chatModel,
+          messages: toProviderMessages(messages),
+          stream: false,
+          ...this.chatOpts(options),
+        },
         {},
         { timeoutMs: this.opts.timeoutMs, signal: options?.signal },
       );
@@ -52,9 +57,7 @@ export class OllamaProvider implements LLMProvider {
             model: this.opts.chatModel,
             messages: toProviderMessages(messages),
             stream: true,
-            ...(options?.temperature !== undefined
-              ? { options: { temperature: options.temperature } }
-              : {}),
+            ...this.chatOpts(options),
           }),
           signal: ctrl.signal,
         });
@@ -88,6 +91,14 @@ export class OllamaProvider implements LLMProvider {
         options?.signal?.removeEventListener('abort', onAbort);
       }
     });
+  }
+
+  /** 生成参数透传(issue #86):Ollama 走请求体 options 字段,maxTokens 映射 num_predict。 */
+  private chatOpts(options?: ChatOptions): { options?: Record<string, number> } {
+    const o: Record<string, number> = {};
+    if (options?.temperature !== undefined) o.temperature = options.temperature;
+    if (options?.maxTokens !== undefined) o.num_predict = options.maxTokens;
+    return Object.keys(o).length ? { options: o } : {};
   }
 
   async embed(texts: string[]): Promise<number[][]> {

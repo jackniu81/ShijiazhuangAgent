@@ -35,6 +35,38 @@ describe('buildAppConfig 默认值与开关(issue #9 相关)', () => {
     expect(buildAppConfig({ WS_TOKEN: 'secret' }).wsAuth.token).toBe('secret');
   });
 
+  it('生成参数默认值(issue #86):chat 0.7/2048,plan 低温 0.2/4096', () => {
+    const c = buildAppConfig({});
+    expect(c.chat.temperature).toBe(0.7);
+    expect(c.chat.maxTokens).toBe(2048);
+    expect(c.plan.temperature).toBe(0.2);
+    expect(c.plan.maxTokens).toBe(4096);
+  });
+
+  it('生成参数可由环境变量覆盖,非法/非正数回退默认(issue #86)', () => {
+    const c = buildAppConfig({
+      CHAT_TEMPERATURE: '0.3',
+      CHAT_MAX_TOKENS: '1024',
+      PLAN_TEMPERATURE: '0.1',
+      PLAN_MAX_TOKENS: '8192',
+    });
+    expect(c.chat.temperature).toBe(0.3);
+    expect(c.chat.maxTokens).toBe(1024);
+    expect(c.plan.temperature).toBe(0.1);
+    expect(c.plan.maxTokens).toBe(8192);
+
+    const bad = buildAppConfig({
+      CHAT_TEMPERATURE: 'abc',
+      CHAT_MAX_TOKENS: '-1',
+      PLAN_TEMPERATURE: '0',
+      PLAN_MAX_TOKENS: '',
+    });
+    expect(bad.chat.temperature).toBe(0.7);
+    expect(bad.chat.maxTokens).toBe(2048);
+    expect(bad.plan.temperature).toBe(0.2);
+    expect(bad.plan.maxTokens).toBe(4096);
+  });
+
   it('RAG_HYBRID=0 / false 关闭混合检索', () => {
     expect(buildAppConfig({ RAG_HYBRID: '0' }).rag.hybrid).toBe(false);
     expect(buildAppConfig({ RAG_HYBRID: 'false' }).rag.hybrid).toBe(false);
