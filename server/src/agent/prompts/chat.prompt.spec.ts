@@ -53,9 +53,21 @@ describe('chat.prompt', () => {
     expect(user).toContain('Q:你好');
   });
 
-  it('参考资料块整体截断至 2000 字', () => {
-    const big = doc('大山', 'big.md', '文'.repeat(3000));
+  it('参考资料块:超预算单条按句子边界截,残句以省略号收尾(issue #91)', () => {
+    const sentence = '正定古城位于石家庄北郊,夜景灯光很亮. '; // 22 字
+    const big = doc('大山', 'big.md', sentence.repeat(120)); // 2640 字
     const user = formatChatContext([big], 'q');
-    expect(user.length).toBeLessThan(2100);
+    expect(user.length).toBeLessThanOrEqual(2110);
+    const body = user.split('参考资料:\n')[1].split('\nQ:')[0];
+    expect(body.endsWith('…')).toBe(true);
+    // 不在半句/半词中间收尾:截断点必须落在标点之后
+    expect(body.slice(0, -1)).toMatch(/[,，、;:：。!?！？]$/);
+  });
+
+  it('预算内逐条装全,短资料之间不会被腰斩(issue #91)', () => {
+    const docs = Array.from({ length: 10 }, (_, i) => doc(`D${i}`, `d${i}.md`, `第${i}条资料,内容完整。`));
+    const user = formatChatContext(docs, 'q');
+    for (const d of docs) expect(user).toContain(d.text);
+    expect(user.split('参考资料:\n')[1].split('\nQ:')[0]).not.toContain('…');
   });
 });

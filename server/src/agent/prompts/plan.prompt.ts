@@ -1,5 +1,6 @@
 import { Msg } from '../llm/llm.types';
 import { RetrievedDoc } from '../rag/rag.types';
+import { truncateAtBoundary } from './util';
 
 /** 行程规划 prompt 模板(issue #10 从 graph/nodes.ts 抽出,内容保持逐字一致)。 */
 
@@ -23,9 +24,9 @@ export interface PlanPromptInput {
   preferences?: string;
 }
 
-/** 用户需求 + 本地参考资料块。 */
+/** 用户需求 + 本地参考资料块(单条按句子边界截 120 字,issue #91)。 */
 export function formatPlanRequest(input: PlanPromptInput, docs: RetrievedDoc[]): string {
-  const context = docs.map((d) => `- ${d.meta.title}:${d.text.slice(0, 120)}`).join('\n');
+  const context = docs.map((d) => `- ${d.meta.title}:${truncateAtBoundary(d.text, 120)}`).join('\n');
   return (
     `需求:天数=${input.days},人数=${input.travelers ?? 1},预算=${input.budget ?? 'comfort'},` +
     `兴趣=${(input.interests ?? []).join('/') || '不限'},偏好=${input.preferences ?? '无'}\n` +

@@ -1,8 +1,11 @@
 import { Msg } from '../llm/llm.types';
 import { RetrievedDoc } from '../rag/rag.types';
-import { uniqueTitles } from './util';
+import { fitDocsToBudget, uniqueTitles } from './util';
 
 /** 旅游问答 prompt 模板(issue #10 从 graph/nodes.ts 抽出,内容保持逐字一致)。 */
+
+/** 参考资料块总预算(与原整体 slice(0,2000) 保持一致)。 */
+const CHAT_DOCS_BUDGET = 2000;
 
 /** 人设:问答助手 + 防幻觉事实性约束(issue #90)。 */
 export const CHAT_SYSTEM_PROMPT =
@@ -17,12 +20,13 @@ export interface ChatPromptInput {
   docs: RetrievedDoc[];
 }
 
-/** 参考资料块:标题 + 正文,整体截断防止超上下文。 */
+/** 参考资料块:标题 + 正文,预算内按 doc 逐条装入、单条按句子边界截(issue #91)。 */
 export function formatChatContext(docs: RetrievedDoc[], question: string): string {
   const contextTitles = uniqueTitles(docs).slice(0, 4);
+  const blocks = docs.map((d) => `## ${d.meta.title}\n${d.text}`);
   return (
     `CONTEXT:${contextTitles.join('、')}\n` +
-    `参考资料:\n${docs.map((d) => `## ${d.meta.title}\n${d.text}`).join('\n\n').slice(0, 2000)}\n` +
+    `参考资料:\n${fitDocsToBudget(blocks, CHAT_DOCS_BUDGET)}\n` +
     `Q:${question}`
   );
 }
