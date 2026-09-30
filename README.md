@@ -33,7 +33,7 @@
 
 - **答案可溯源**：`chat:done` 携带 `sources`（命中的语料文档），回答基于本地资料而非模型记忆；资料缺失时明确说明，不猜
 - **行程是结构化数据**：`plan:result` 返回经 schema 校验的 TravelPlan（title + 逐日 + 逐活动 + tips），因此才能渲染逐日流式卡片，也是后续行程编辑与分享链接（#30 / #65）的前提——自由文本给不了这一步
-- **垂直深度**：6 分类 21 篇语料 + tag/region 过滤，覆盖票价、开放时间、闭馆日、市内交通这类通用模型容易答错的细节
+- **垂直深度**：6 分类 31 篇语料 + tag/region 过滤，覆盖票价、开放时间、闭馆日、市内交通这类通用模型容易答错的细节
 - **零门槛可演示**：默认 mock provider 无需任何 key、离线跑通全链路，接真实模型只改一个环境变量
 
 ## 实现亮点
@@ -98,7 +98,7 @@ embedding 模型缺失是本机最常见的状态（`ollama pull bge-m3` 没跑�
 │  PlanCard 流式   │                            │  LangGraph     chat / plan 图   │
 └──────────────────┘                            │  prompts/      模板 + 截断工具  │
                                                 │  RAG           BM25 + 向量 RRF  │
-       data/ 21 篇 markdown ──启动建索引──►      │                内存 / pgvector  │
+       data/ 31 篇 markdown ──启动建索引──►      │                内存 / pgvector  │
                                                 │  llm/          mock|siliconflow │
                                 GET /version ◄──│                /ollama 抽象     │
                                                 └────────────────────────────────┘
@@ -151,7 +151,7 @@ server/                       # NestJS 12 + LangGraph 后端(jest 20 suites)
 └── src/config/               # configuration.ts:集中默认值 + env 转换 + 非法值兜底
 client/                       # React 19 + Vite + Tailwind 4(vitest 43 tests)
 └── src/{components,lib,test} # ChatWindow / chat.reducer(13 action 状态机) / PlanCard / socket
-data/                         # 知识库语料(6 分类 21 篇 markdown + front-matter)
+data/                         # 知识库语料(6 分类 31 篇 markdown + front-matter)
 docs/                         # 见下
 ```
 
@@ -179,4 +179,4 @@ docs/                         # 见下
 
 **不在 README 里维护进度。** 已完成范围（MS-001~004 问答与行程双链路、工程化与单测、鉴权限流）见下方一句话概览；**当前进度、剩余任务、优先级、依赖关系与待决策事项，统一在 [docs/todo.md](docs/todo.md)**。
 
-一句话概览：核心链路（plan/chat 双图 + 混合检索 + 三 Provider + 逐日流式）、客户端（编排、断线重连、错误重试）、工程化（shared 契约包、236 个单测、21 篇语料）已落地；MS-005 上线基线与 MS-006 差异化闭环仍有未完成项——具体哪些「看起来完成但实际只完成一半」的坑，todo.md 第一节有核对表。
+一句话概览：核心链路（plan/chat 双图 + 混合检索 + 三 Provider + 逐日流式）、客户端（编排、断线重连、错误重试）、工程化（shared 契约包、236 个单测、31 篇语料）已落地；MS-005 上线基线与 MS-006 差异化闭环仍有未完成项——具体哪些「看起来完成但实际只完成一半」的坑，todo.md 第一节有核对表。

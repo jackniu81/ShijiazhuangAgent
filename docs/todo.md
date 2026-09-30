@@ -10,10 +10,11 @@
 | 事项 | 表面状态 | 实测结论 |
 |------|---------|---------|
 | #36 部署与运维 | open | **部分完成**：`docker-compose.yml` 已有 app / ollama / postgres / ollama-models 四个服务；但仓库**无 `.github/` 目录**，CI（lint + test + build）完全缺失 |
-| #58 金标评估集 | open | **1/3 完成**：`server/src/eval/dataset/questions.json` 46 例（42 chat + 4 plan）+ `dataset.spec.ts` 结构校验已合入（PR #70 标注 "PR1/3"）；**评估运行脚本与首份基线报告未做** |
+| #58 金标评估集 | open | **1/3 完成**：`server/src/eval/dataset/questions.json` 49 例（45 chat + 4 plan）+ `dataset.spec.ts` 结构校验已合入（PR #70 标注 "PR1/3"）；**评估运行脚本与首份基线报告未做** |
 | #60 LLM 降级链 | open | **进行中**：PR #83（降级链与熔断）状态 OPEN 且 **CONFLICTING**（7 处冲突块）。成本/延迟档案文档未产出 |
 | #29 向量持久化 | closed（PR #80） | 一阶段（pgvector 替换内存 store）**已完成**；二阶段**会话持久化未完成** —— `chat/session.store.ts` 仍是 `Map` + TTL 清扫，注释写着"后续可替换为持久化实现"；`pg-vector.store.ts` 只建了 chunks 表。roadmap 第一节把它列为生产 blocker（C5），**该 blocker 实际仍在** |
-| #64 语料时效 | open | **未起步**：`data/attractions/*.md` front-matter 只有 `title/tags`，无 `verified_at`/`valid_until`（10 篇景点全部为 0 命中） |
+| #64 语料时效 | open | **未起步**：`data/attractions/*.md` front-matter 只有 `title/tags`，无 `verified_at`/`valid_until`（20 篇景点全部为 0 命中） |
+| #104 语料扩充 | open | 正定深度 6 篇 + 市区 4 篇（`data/` 21→31 篇），金标集同步补 3 例；**新写入的票价与开放时间为常见值，需人工核价后转成 `verified_at` 清单条目** |
 | #65 行程分享链接 | open | **未起步**：`docs/api-spec.md` 无分享路由；且**缺前置——plan 落库（plans/share 表）不存在**，且**没有独立 issue 跟踪这件事** |
 | #93 embed 批量 | closed（PR #100 已合并） | 功能与降级路径已落；**遗留**：live「批量 vs 逐条向量一致」未真跑（本机 `ollama serve` 未开 `--embeddings`、无 embedding 模型） |
 
