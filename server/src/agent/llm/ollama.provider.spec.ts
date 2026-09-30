@@ -317,6 +317,21 @@ describe('OllamaProvider embed 批量 (issue #93)', () => {
     }
   });
 
+  // 实测本机 ollama serve 未开 --embeddings 时 /api/embed 回 501,走同一 5xx 分支:
+  // 显式失败并提示服务端配置,不会静默降级到同样不支持的逐条路径
+  it('批量 501(服务端未启用 embeddings)→ 按 5xx 抛出,不回退逐条', async () => {
+    const m = mockFetchRoutes(() =>
+      new Response(JSON.stringify({ error: 'This server does not support embeddings.' }), { status: 501 }),
+    );
+    try {
+      const p = new OllamaProvider(opts);
+      await expect(p.embed(['a', 'b'])).rejects.toThrow(/501/);
+      expect(m.urls().filter((u) => u.endsWith('/api/embeddings'))).toHaveLength(0);
+    } finally {
+      m.restore();
+    }
+  });
+
   it('逐条路径返回结构异常 → 不可重试错误直接抛出', async () => {
     const m = mockFetchRoutes((url) =>
       url.endsWith('/api/embed')
