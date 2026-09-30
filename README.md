@@ -1,109 +1,154 @@
 # 石家庄旅游助手 AI Agent
 
-基于 LangGraph + RAG + LLM 的石家庄旅游智能助手，支持**行程规划**和**自由问答**两种模式。
+一个把「LLM 只是表达层」落到实处的工作：**LangGraph 双图编排 + 混合检索 RAG + 可替换 Provider 抽象 + 端到端流式契约**，覆盖行程规划与自由问答两条业务链路。
 
-## 核心功能
+不是「调一次大模型 API 的 demo」——这个仓库里能看到的是工程化处理：结构化输出的容错与回炉、检索的降级与阈值、契约的单一来源、以及 193 + 43 个单测把这些行为都钉住。
 
-按**业务能力**（非代码包/技术组件）划分，每项功能均有独立业务入口与业务边界：
+## 一览
 
-| # | 功能 | 业务入口 | 一句话理由（独立入口 + 业务边界） |
-|---|-----------|---------|--------------------------------|
-| 1 | **行程规划** | WS `plan:create`，回推 `plan:progress` / `plan:day` / `plan:result` | 用户填天数、兴趣偏好即可单独获得逐日流式行程，有专属状态图(retrieve → planStep → refine → done)与专属表单/卡片组件，业务边界完整 |
-| 2 | **自由问答** | WS `chat:ask`，回推 `chat:token` / `chat:done` | 多轮自然语言咨询可单独对外提供答疑能力，有独立的状态图(retrieve → generate)与历史上下文携带，与行程规划职责不同 |
-| 3 | **任务管控** | WS `task:cancel` + 统一错误事件 `app:error` | 流式生成可随时中断(按 requestId 取消/abort)，异常统一收敛为错误契约并支撑前端一键重试，是跨两条业务链路的独立管控能力 |
-| 4 | **会话服务** | 连接建立与 sessionId 契约(客户端 sessionStorage 持久化) | 独立管理多轮会话生命周期：会话创建/恢复、历史上下文携带、TTL 清理、IP+会话双维度限流(#62)与连接鉴权(#61)，去掉它多轮能力即失效 |
-| 5 | **旅游知识库** | `data/` 6 分类 21 篇语料 + front-matter 元数据，启动时自动构建索引 | 景点/美食/酒店/交通/线路/特产是独立运营的业务数据资产，有专属内容结构与时效规范，单独支撑所有业务链路的领域知识供给 |
-| 6 | **运维支持** | HTTP `GET /version` + 连接状态契约 | 向外部提供版本探测与部署运维能力，有独立 Controller，与对话业务完全正交 |
+| 指标 | 数值 |
+|------|------|
+| 业务代码 | ~4.8k 行 TS（server + client + shared，不含测试） |
+| 单元测试 | server **20 suites / 193 tests**（jest）· client **7 files / 43 tests**（vitest） |
+| 测试文件 | 21 个，与源码**同目录** colocate（`*.spec.ts`） |
+| 领域语料 | 6 分类 21 篇 markdown，启动时自动建索引 |
+| LLM 后端 | 3 个可互换 Provider（mock / siliconflow / ollama），一个 env 切换 |
+| 向量后端 | 2 个可互换实现（内存 / pgvector），由契约测试锁定可替换性 |
+| 部署 | 单镜像（server 同端口托管 client 静态资源，WS 同源）+ Docker Compose 可选 Ollama/postgres |
 
-**技术支撑层（不计为业务功能）**：前端客户端(交互层)、`packages/shared`(WS 契约类型)、RAG 检索引擎(BM25+向量+RRF，为 #1/#2/#5 服务的算法实现)、LLM Provider 抽象(mock/siliconflow/ollama，模型接入实现)、LangGraph(图编排框架)。
+## 核心能力
+
+按**业务能力**（非代码包/技术组件）划分，每项都有独立业务入口与边界：
+
+| # | 能力 | 业务入口 | 为什么是独立能力 |
+|---|------|---------|-----------------|
+| 1 | **行程规划** | WS `plan:create` → `plan:progress` / `plan:day` / `plan:result` | 填天数、兴趣即得**逐日流式**行程；专属状态图（retrieve → planStep → refine → done，结构校验与回炉在 plan 节点内）与专属表单/卡片 |
+| 2 | **自由问答** | WS `chat:ask` → `chat:token` / `chat:done` | 多轮咨询，独立状态图（retrieve → generate），带历史上下文与追问 query 改写 |
+| 3 | **任务管控** | WS `task:cancel` + 统一错误事件 `app:error` | 流式生成按 `requestId` 可中断（透传到 LLM HTTP 层），异常统一收敛为错误契约并支撑前端一键重试 |
+| 4 | **会话服务** | 连接建立 + `sessionId` 契约 | 会话创建/恢复、历史携带、TTL 清扫、IP+会话双维度限流（#62）、连接鉴权（#61） |
+| 5 | **旅游知识库** | `data/` 语料 + front-matter，启动自动索引 | 独立运营的内容资产（景点/美食/酒店/交通/线路/特产），支撑所有链路的领域知识 |
+| 6 | **运维支持** | HTTP `GET /version` + 连接状态契约 | 版本探测与部署运维，独立 Controller，与对话业务正交 |
+
+**技术支撑层**（不计为业务功能）：React 客户端（交互层）、`packages/shared`（WS 契约类型）、RAG 检索引擎（为 #1/#2/#5 服务）、LLM Provider 抽象（模型接入）、LangGraph（图编排）。
+
+## 实现亮点
+
+以下每一条都能在代码里指到具体位置，也都有对应单测。
+
+### 1. 结构化输出：先「容错规整」，再「带原因回炉」（#59 / #87）
+
+真实 LLM 的 JSON 会漂移：被 ```` ```json ```` 包裹、字段为 `null`、`day` 写成 `"1"`、多塞字段。做法是分清**该拦的**和**该修的**：
+
+- `graph/plan.schema.ts` — zod 校验层，`optStr`（缺失/null → 交给 refine 补默认）、`coercedNum`（数字字符串统一收编）。原则写在文件头注释：**类型错必须拦、可规整的小漂移放行**。
+- `prompts/plan.prompt.ts#buildPlanRepairMessages` — 校验失败时把**校验器的具体 reasons + 上次输出**回喂给模型做定点修复，而不是重新发挥一次。
+- 非流式 `format:'json'` / `response_format` 强约束（#87），流式路径**故意不注入**（会破坏增量返回），spec 里锁死了这个差异。
+
+### 2. 混合检索：避开「两路得分不可比」的坑（#9）
+
+BM25 分数与向量余弦不是同一量纲，加权求和会互相污染。所以用 **RRF（Reciprocal Rank Fusion）**——只看名次不看分值：`Σ 1/(RRF_K + rank + 1)`，`RRF_K = 60`（`rag/fusion.ts`）。再叠一层规则 rerank：query 命中 `tags` 加 `0.015`、命中 `region` 加 `0.01`，让「带老人爬山」「正定有什么」这类带明确标签意图的查询置顶对应语料。
+
+### 3. 向量后端可替换，用契约测试而不是靠约定（#29）
+
+`InMemoryVectorStore`（零依赖、开发默认可跑）与 `PgVectorStore`（`ORDER BY embedding <=> $1::vector`，cosine 距离下推 SQL）实现同一组接口。关键是 `rag/store.contract.spec.ts`：它**固化接口的两半形状**（消费侧 `VectorStore` / 可写侧 `WritableVectorStore`），并用一个只有 `size + searchByText` 的 fake 证明「pgvector 形态的后端确实能被检索流程使用」。这个测试的存在目的是**防止后续 PR 悄悄破坏可替换性**。
+
+BM25 一路刻意留在 TS 内存里算——语料是百篇级，不是瓶颈；只把向量路和 metadata 过滤下沉到 SQL。改动边界收敛在 store 层。
+
+### 4. RAG 不可用时不 500，降级成「无检索模式」（#27）
+
+embedding 模型缺失是本机最常见的状态（`ollama pull bge-m3` 没跑就是没跑）。这种情况**不阻断服务**：`RagService.isDegraded` 置位 → 图节点收到 `deps.ragDegraded` → 回答照常产出、不带 `sources`，并追加明确提示 `(注:本地资料检索暂不可用,以上回答基于模型常识)`（`graph/nodes.ts`）。
+
+同一个分支逻辑还区分了另一种「无资料」：检索阈值把低分文档全部过滤掉（#89）时提示 `(注:未检索到本地资料,...)`——**同样是空结果，原因不同就必须在文案上分开**，否则运营无法判断是语料不够还是阈值调坏了。
+
+### 5. Provider 抽象 + 启动级自愈（#8 / #27）
+
+`mock / siliconflow / ollama` 三家共用 `LLMProvider` 接口，一个 `LLM_PROVIDER` 切换。工程上的价值在两处：
+
+- **mock 是测试与 demo 的基石**——不需要任何 key、不联网就能跑通全链路端到端，193 个 server 单测全部基于它；
+- **选错配置不炸启动**（#27）：`LLM_PROVIDER=siliconflow` 但缺 `SILICONFLOW_API_KEY`、或填了非法取值 → 打 warn 并自动回退 mock。开箱即用的成本比「让新手对着 stack trace 猜」低得多。
+
+（运行期的真实故障降级链在途，见 PR #83。）
+
+### 6. 端到端流式取消与错误契约（#26 / #62）
+
+`agent.gateway.ts` 维护 `requestId -> { cancelled, AbortController }`：`task:cancel` 按 id 精确取消，signal 一路透传到 LLM HTTP 请求（`http.ts#composeSignal` 组合「超时 + 外部取消」并能区分两者），请求结束回收登记避免集合泄漏。前端侧 `chat.reducer.ts` 把 13 种 `ChatAction` 抽成纯函数状态机，异常统一收敛为 `app:error` 并支持一键重试——toast、重试、重连都有独立单测。
+
+### 7. 防幻觉做在 prompt 层，并配可回归的证据（#90 / #91 / #88）
+
+- **约束写法**：票价/开放时间/班次**只能引用参考资料明确给出的内容**，未覆盖时必须回答「资料未提及,建议出行前核实」；system prompt 的措辞由 spec 逐字锚定（回归锚点），防止被后续 PR 顺手改软。
+- **上下文截断按语义边界**（#91）：`prompts/util.ts#truncateAtBoundary` 优先落在句末标点、退化到逗号级、最后才硬截并加 `…` 标记；`fitDocsToBudget` 逐条装预算，剩余不足最小占比就整条舍弃，避免最后一条被腰斩成残句。
+- **追问检索改写**（#88）：只取最近一轮 user 消息拼接改写 query——再多会稀释检索主题，代码里写明了这个取舍。
+- **金标评估集**（#58，进行中）：`server/src/eval/dataset/questions.json` 已落 46 例（42 chat + 4 plan，覆盖票价/开放时间/交通/行程约束/抗幻觉等 8 类），断言**要点命中 + 禁止词 + 期望来源**三元组（例如某题禁止出现别的景点票价 `65 元`），杜绝「看起来对」的自评。
+
+### 8. WS 契约单一来源（#48）
+
+`packages/shared/src/agent.types.ts`（115 行）是 server 与 client **唯一**的契约定义，事件名常量 + payload 类型都在里面。此前两侧各维护一份镜像类型、改一处漏一处的做法被彻底移除；`docs/api-spec.md` 明确写了「与代码不一致时以 shared 包为准」。
 
 ## 架构
 
 ```
-┌──────────────────┐   WebSocket (Socket.IO)    ┌───────────────────────────┐
-│  Client (React)  │ ◄────────────────────────► │  Server (NestJS)          │
-│  ChatWindow      │   /agent namespace /ws     │  AgentGateway             │
-└──────────────────┘                            │  AgentService + 会话历史   │
-                                                │  LangGraph(chat/plan 图)  │
-                                                │  prompts/ 模板目录          │
-                                                │  RAG(向量+BM25 混合检索)   │
-                                                │  LLM(mock/siliconflow/    │
-                                                │       ollama)             │
-                                                └───────────────────────────┘
+┌──────────────────┐   WebSocket (Socket.IO)    ┌────────────────────────────────┐
+│  Client (React)  │ ◄────────────────────────► │  Server (NestJS 12)            │
+│  ChatWindow      │   /agent namespace /ws     │  AgentGateway  取消/限流/鉴权   │
+│  chat.reducer    │                            │  AgentService  会话历史 + 编排  │
+│  PlanCard 流式   │                            │  LangGraph     chat / plan 图   │
+└──────────────────┘                            │  prompts/      模板 + 截断工具  │
+                                                │  RAG           BM25 + 向量 RRF  │
+       data/ 21 篇 markdown ──启动建索引──►      │                内存 / pgvector  │
+                                                │  llm/          mock|siliconflow │
+                                GET /version ◄──│                /ollama 抽象     │
+                                                └────────────────────────────────┘
 ```
 
-## 功能
+## 技术栈
 
-- 📋 **行程规划**:填写天数、兴趣偏好 → 逐天流式生成行程卡片
-- 💬 **自由问答**:多轮对话，支持历史上下文携带
-- ⏹ **停止生成**:流式输出中可随时中断
-- ⚠️ **错误提示 + 一键重试**:LLM/RAG 异常时自动 toast 提示，支持重试
-- 🔄 **断线自动重连**:Socket.IO 内置重连机制
-- 💾 **Session 持久化**:刷新页面保持对话会话（客户端 sessionStorage 存会话 ID；服务端会话历史当前为进程内内存 Map，服务重启后不保留，持久化归属 #29，一致性维护约定见 [#84](https://github.com/jackniu81/ShijiazhuangAgent/issues/84)）
+| 层次 | 选型 |
+|------|------|
+| 语言 | TypeScript 5.7 / 5.8（strict） |
+| 后端 | NestJS 12 · Express 5 · Socket.IO 4.8 |
+| Agent 编排 | `@langchain/langgraph` 1.4（`StateGraph` + Annotation channels） |
+| 校验 | zod 4（plan 输出结构校验与漂移规整） |
+| 检索 | 自研：BM25 + 余弦向量 + RRF 融合 + 规则 rerank；pg 侧 `pgvector` 余弦距离 |
+| 持久化 | PostgreSQL + pgvector（`pg` 8.23，可切回内存实现） |
+| 前端 | React 19 · Vite 8 · Tailwind CSS 4 · socket.io-client |
+| 测试 | server jest 30 + ts-jest（colocated spec）· client vitest 5 + Testing Library |
+| 部署 | 多阶段 Dockerfile（单镜像托管 server + client 静态资源）· Docker Compose |
+| 工程 | npm workspaces（`packages/shared` / `server` / `client`） |
 
 ## 快速开始
 
 ```bash
-# 安装依赖
 npm install
 
-# 配置环境变量(可选，默认 LLM_PROVIDER=mock 无需任何 key)
+# 默认 LLM_PROVIDER=mock,无需任何 key、离线可跑通全链路
 cp server/.env.example server/.env
 
-# 前后端并行启动(server :3000 / client :5173)
-npm run dev
-
-# 或单独启动
-npm run dev -w server
-npm run dev -w client   # vite 代理 /ws 到 server
-
-# 运行单元测试:server jest / client vitest
-npm run test -w server
-npm run test -w client
+npm run dev                 # server :3000 / client :5173 并行
+npm run test -w server      # 20 suites / 193 tests
+npm run test -w client      # 7 files / 43 tests
 ```
 
-## 生产构建
+接真实模型：`LLM_PROVIDER=siliconflow` + `SILICONFLOW_API_KEY`，或本地 `ollama serve` + `ollama pull qwen2.5:7b`（embedding 缺模型会自动走无检索降级模式）。
 
-```bash
-npm run build             # 根脚本:依次构建 client + server
-node server/dist/main.js  # server 同端口托管 client/dist,单源部署(WebSocket /ws 同源)
-```
-
-## 容器部署
-
-```bash
-docker compose up -d --build   # 一个镜像含 server + client,暴露 :3000
-```
-
-镜像分层、可选 Ollama/postgres profile 与上线待补清单见 [docs/deploy.md](docs/deploy.md)。
-
-## 环境变量
-
-| 变量 | 默认 | 说明 |
-|------|------|------|
-| `LLM_PROVIDER` | `mock` | `mock` \| `siliconflow` \| `ollama` |
-| `SILICONFLOW_API_KEY` | - | 选 siliconflow 时必填 |
-| `OLLAMA_BASE_URL` | `http://localhost:11434` | 本机 ollama serve |
-| `RAG_HYBRID` | `1` | BM25+向量混合检索开关,`0` 退回纯向量 |
-| `CHAT_HISTORY_TURNS` | `6` | 多轮对话携带的历史轮数 |
-
-完整列表见 [server/.env.example](server/.env.example)。
-
-## 知识库
-
-本地 markdown 语料，启动时自动构建索引（向量 + BM25 双路，RRF 融合 + tag/region rerank）：
+## 项目结构
 
 ```
-data/                          # 共 21 篇
-├── attractions/   # 景点(10 篇) — 隆兴寺、正定古城、天桂山、驼梁…
-├── food/          # 美食(5 篇) — 牛肉板面、正定八大碗、无极饸饹…
-├── hotel/         # 酒店(1 篇) — 市区推荐分档
-├── transport/     # 交通(1 篇) — 地铁 + 公交 + 旅游专线
-├── routes/        # 推荐线路(2 篇)
-└── specialties/   # 特产(2 篇) — 赞皇大枣、赵县雪花梨
+packages/shared/              # WS 契约类型唯一来源 (#48)
+server/                       # NestJS 12 + LangGraph 后端(jest 20 suites)
+├── src/agent/
+│   ├── agent.gateway.ts      # WS 网关:requestId 取消 + 限流 + 鉴权
+│   ├── agent.service.ts      # 编排 chat/plan 双图
+│   ├── graph/                # 两张图 + nodes + plan.schema(zod 校验/回炉)
+│   ├── prompts/              # chat/plan 模板 + util(边界截断、预算装载)
+│   ├── rag/                  # bm25 / fusion(RRF+rerank) / store / pg-vector.store / indexer
+│   ├── chat/                 # session.store(内存 + TTL)
+│   ├── llm/                  # http(重试/超时/取消/流式解析) + 三 Provider + factory
+│   └── eval/                 # 金标评估集与类型(#58)
+└── src/config/               # configuration.ts:集中默认值 + env 转换 + 非法值兜底
+client/                       # React 19 + Vite + Tailwind 4(vitest 43 tests)
+└── src/{components,lib,test} # ChatWindow / chat.reducer(13 action 状态机) / PlanCard / socket
+data/                         # 知识库语料(6 分类 21 篇 markdown + front-matter)
+docs/                         # 见下
 ```
-
-所有文档统一 front-matter（title / tags / region），支持 rerank 按分类和地区过滤。
 
 ## 文档
 
@@ -111,65 +156,22 @@ data/                          # 共 21 篇
 
 | 文件 | 说明 |
 |------|------|
+| [docs/todo.md](docs/todo.md) | **项目进度、剩余任务、优先级与依赖关系**（按代码实测逐条核对） |
 | [docs/api-spec.md](docs/api-spec.md) | WebSocket API 规范（Server / Client 契约） |
-| [docs/llm-providers.md](docs/llm-providers.md) | LLM Provider 切换 / 环境变量 / 回退降级策略 / 端到端验收记录 |
-| [docs/deploy.md](docs/deploy.md) | 部署与运维：镜像 / Docker Compose / 环境变量 / 上线待补清单 |
-| [docs/roadmap.md](docs/roadmap.md) | **今后发展规划**：pgvector 选型 / 真实 LLM / 差异化策略 / 里程碑 MS-005、MS-006 |
+| [docs/llm-providers.md](docs/llm-providers.md) | Provider 切换 / 环境变量 / 回退降级策略 / 端到端验收记录 |
+| [docs/deploy.md](docs/deploy.md) | 部署与运维：镜像 / Compose / 环境变量 / 上线待补清单 |
 
-**📦 已归档**（docs/archive/，历史设计/评审快照，仅供追溯，当前状态以代码为准）
+**📦 已归档**（`docs/archive/`，历史快照，仅供追溯，当前状态以代码与 todo.md 为准）
 
 | 文件 | 说明 |
 |------|------|
+| [archive/roadmap.md](docs/archive/roadmap.md) | 2026-09-26 发展规划快照（pgvector 选型论证、差异化命题仍有参考价值；里程碑状态已迁至 todo.md） |
 | [archive/server-spec.md](docs/archive/server-spec.md) | Server 设计蓝图（Task #2 时期） |
 | [archive/ui-spec.md](docs/archive/ui-spec.md) | Client UI 规范（Task #3 时期，实现已超出） |
 | [archive/code-review.md](docs/archive/code-review.md) | MVP 代码 Review 快照（2026-09-25） |
 
-## 项目结构
+## 里程碑与剩余工作
 
-```
-packages/shared/              # @shijiazhuang-agent/shared — WS 契约类型唯一来源 (#48)
-server/                       # NestJS 12 + LangGraph 后端
-├── src/agent/
-│   ├── agent.gateway.ts      # WebSocket 网关 (/agent namespace /ws path) + 单测
-│   ├── agent.service.ts      # 编排 chat/plan 两张 LangGraph 图 + 单测
-│   ├── graph/                # chat.graph + plan.graph + nodes(含 plan:day 流式)
-│   ├── prompts/              # chat.prompt + plan.prompt 模板
-│   ├── rag/                  # BM25 + 向量混合检索,RRF 融合 + rerank
-│   ├── chat/                 # session.store 会话历史（进程内内存 + TTL 自动清理，重启不保留，持久化属 #29）
-│   └── llm/                  # Provider 抽象:mock / siliconflow / ollama
-└── 单测: jest 17 suites / 140 tests
-client/                       # React 19 + Vite + Tailwind CSS 4 前端
-└── src/
-    ├── components/
-    │   ├── ChatWindow.tsx    # 主容器 — socket 监听 + 渲染
-    │   ├── chat.reducer.ts   # 状态机(17 种 action)独立可测 (#49)
-    │   ├── Layout.tsx        # sticky Header + Main + Footer(输入区 slot)
-    │   ├── ConnectionStatus.tsx   # 连接状态指示器
-    │   ├── MessageList.tsx   # 消息滚动列表
-    │   ├── MessageItem.tsx   # user / assistant(text/plan) / system 渲染
-    │   ├── PlanCard.tsx      # 行程卡片(逐日流式占位 → 完整渲染)
-    │   ├── StreamingText.tsx # 打字机效果 + 闪烁光标
-    │   └── PlanningForm.tsx  # 行程规划表单
-    ├── lib/
-    │   ├── socket.ts         # Socket.IO 单例(connect/on/emit + 重连)
-    │   └── types.ts          # re-export shared 包 + Client 侧 UI 消息模型
-    └── test/                 # Vitest + @testing-library/react (43 tests)
-data/                         # RAG 知识库语料(21 篇 markdown,6 分类)
-docs/                         # 现势: api-spec / roadmap;archive/: 已归档历史快照
-```
+**不在 README 里维护进度。** 已完成范围（MS-001~004 问答与行程双链路、工程化与单测、鉴权限流）见下方一句话概览；**当前进度、剩余任务、优先级、依赖关系与待决策事项，统一在 [docs/todo.md](docs/todo.md)**。
 
-**技术栈**: NestJS 12 · @langchain/langgraph · Socket.IO · React 19 · Vite 8 · Tailwind CSS 4 · Jest(server) · Vitest(client)
-
-## 任务进度
-
-**MS-001 问答系统 / MS-002 行程规划 / MS-003-004 工程收尾 — 已完成**
-
-- [x] Server: LangGraph 双图 + RAG 混合检索 + 会话历史 + SiliconFlow/Ollama Provider + 逐天流式 plan:day
-- [x] Client: ChatWindow + PlanningForm + 全组件 + 断线重连 + 错误 toast + 一键重试 + sessionId 持久化
-- [x] 工程: @shijiazhuang-agent/shared 类型包 + server 140 / client 43 单测 + 21 篇分类语料
-
-**进行中里程碑**（详情见 [docs/roadmap.md](docs/roadmap.md)）
-
-- [**MS-005 上线基线**](https://github.com/jackniu81/ShijiazhuangAgent/milestone/5)：#27 真实 LLM 验收 · #29 pgvector 持久化 · #36 Docker · #58 金标评估集 · #59 JSON 校验 · #60 降级链 · #61 鉴权 · #62 限流
-- [**MS-006 差异化闭环**](https://github.com/jackniu81/ShijiazhuangAgent/milestone/6)：#30 行程编辑导出 · #31 实时数据 · #32 地图 · #63 行程校验节点 · #64 语料时效 · #65 分享链接 · #66 对比评估报告
-- **MS-999 观察项**：#33 长期记忆个性化 · #35 多语言语音
+一句话概览：核心链路（plan/chat 双图 + 混合检索 + 三 Provider + 逐日流式）、客户端（编排、断线重连、错误重试）、工程化（shared 契约包、236 个单测、21 篇语料）已落地；MS-005 上线基线与 MS-006 差异化闭环仍有未完成项——具体哪些「看起来完成但实际只完成一半」的坑，todo.md 第一节有核对表。
