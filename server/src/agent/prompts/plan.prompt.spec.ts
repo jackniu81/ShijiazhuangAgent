@@ -15,11 +15,12 @@ const doc = (title: string, source: string, text = 'x'): RetrievedDoc => ({
 });
 
 describe('plan.prompt', () => {
-  it('system 人设 + schema 与抽出前逐字一致(回归锚点)', () => {
-    expect(PLAN_SYSTEM_PROMPT).toBe(
-      '你是石家庄旅游规划助手。只输出符合给定 JSON schema 的行程,不要多余文字。' +
-        'schema: {"title":string,"days":[{"day":int,"items":[{"time":string,"title":string,"place":string,"description":string}]}],"summary":string,"tips":[string]}',
-    );
+  it('system 人设 + schema 保持,并追加防幻觉事实性约束(issue #90)', () => {
+    expect(PLAN_SYSTEM_PROMPT.startsWith('你是石家庄旅游规划助手。只输出符合给定 JSON schema 的行程,不要多余文字。')).toBe(true);
+    expect(PLAN_SYSTEM_PROMPT).toContain('不得出现参考资料未给出的票价、开放时间或交通班次断言');
+    expect(PLAN_SYSTEM_PROMPT).toContain('资料未提及,建议出行前核实');
+    expect(PLAN_SYSTEM_PROMPT).toContain('禁止编造数字');
+    expect(PLAN_SYSTEM_PROMPT.endsWith(PLAN_SCHEMA_HINT)).toBe(true);
     expect(PLAN_SCHEMA_HINT.startsWith('schema: ')).toBe(true);
   });
 

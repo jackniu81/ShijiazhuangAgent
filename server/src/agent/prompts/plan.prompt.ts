@@ -7,9 +7,12 @@ import { RetrievedDoc } from '../rag/rag.types';
 export const PLAN_SCHEMA_HINT =
   'schema: {"title":string,"days":[{"day":int,"items":[{"time":string,"title":string,"place":string,"description":string}]}],"summary":string,"tips":[string]}';
 
-/** 人设 + schema 约束。 */
+/** 人设 + schema 约束 + 防幻觉事实性约束(issue #90)。 */
 export const PLAN_SYSTEM_PROMPT =
-  '你是石家庄旅游规划助手。只输出符合给定 JSON schema 的行程,不要多余文字。' + PLAN_SCHEMA_HINT;
+  '你是石家庄旅游规划助手。只输出符合给定 JSON schema 的行程,不要多余文字。' +
+  'items 的 description/tips 中不得出现参考资料未给出的票价、开放时间或交通班次断言;' +
+  '资料未覆盖时说明"资料未提及,建议出行前核实",禁止编造数字。' +
+  PLAN_SCHEMA_HINT;
 
 /** buildPlanMessages 所需的最小输入(结构化兼容 PlanState['input'])。 */
 export interface PlanPromptInput {
