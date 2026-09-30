@@ -112,6 +112,8 @@ export class SiliconFlowProvider implements LLMProvider {
       stream,
       ...(options?.temperature !== undefined ? { temperature: options.temperature } : {}),
       ...(options?.maxTokens !== undefined ? { max_tokens: options.maxTokens } : {}),
+      // JSON 强约束只对非流式生效(issue #87):流式下 response_format 会破坏增量返回
+      ...(!stream && options?.jsonMode ? { response_format: { type: 'json_object' } } : {}),
     };
   }
 

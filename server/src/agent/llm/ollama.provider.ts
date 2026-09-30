@@ -26,6 +26,8 @@ export class OllamaProvider implements LLMProvider {
           messages: toProviderMessages(messages),
           stream: false,
           ...this.chatOpts(options),
+          // JSON 强约束只对非流式生效(issue #87),与 chatOpts 的 options 字段互不影响
+          ...(options?.jsonMode ? { format: 'json' } : {}),
         },
         {},
         { timeoutMs: this.opts.timeoutMs, signal: options?.signal },

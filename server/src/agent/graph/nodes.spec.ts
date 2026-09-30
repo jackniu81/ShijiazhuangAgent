@@ -338,7 +338,7 @@ describe('生成参数透传 (issue #86)', () => {
     expect((d.streamOpts[0] as any).signal).toBe(d.signal);
   });
 
-  it('planWithRepair 两次调用均带 plan 场景低温参数', async () => {
+  it('planWithRepair 两次调用均带 plan 场景低温参数与 JSON 强约束', async () => {
     const d = makeScriptedPlanDeps(['not json', VALID_PLAN_JSON]);
     const chatOpts: unknown[] = [];
     d.llm = {
@@ -352,7 +352,7 @@ describe('生成参数透传 (issue #86)', () => {
     await nodes.plan(d)(planState());
     // 首次 + 修复重试各一次,参数一致
     expect(chatOpts).toHaveLength(2);
-    expect(chatOpts[0]).toEqual({ temperature: 0.2, maxTokens: 4096 });
+    expect(chatOpts[0]).toEqual({ temperature: 0.2, maxTokens: 4096, jsonMode: true });
     expect(chatOpts[1]).toEqual(chatOpts[0]);
   });
 });

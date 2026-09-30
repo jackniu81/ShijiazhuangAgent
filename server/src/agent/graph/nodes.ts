@@ -237,8 +237,12 @@ export function assemblePlanFromDocs(input: PlanState['input'], docs: RetrievedD
  * 具体校验原因只进日志,不外泄给客户端。
  */
 async function planWithRepair(deps: GraphDeps, state: PlanState): Promise<TravelPlan> {
-  // plan 场景低温采样 + token 上限(issue #86),两次调用(首次/修复)参数一致
-  const opts = { temperature: deps.config.plan.temperature, maxTokens: deps.config.plan.maxTokens };
+  // plan 场景低温采样 + token 上限(issue #86)+ JSON 强约束(issue #87),两次调用参数一致
+  const opts = {
+    temperature: deps.config.plan.temperature,
+    maxTokens: deps.config.plan.maxTokens,
+    jsonMode: true,
+  };
   const first = await deps.llm.chat(buildPlanMessages(state.input, state.docs), opts);
   const checked = validatePlanJson(first, state.input.days);
   if (checked.ok) return refinePlan(checked.plan, state.input.days);
