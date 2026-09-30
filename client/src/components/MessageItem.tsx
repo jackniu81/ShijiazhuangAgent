@@ -1,4 +1,5 @@
 import type { ChatMessage } from '../lib/types';
+import MarkdownMessage from './MarkdownMessage';
 import PlanCard from './PlanCard';
 import StreamingText from './StreamingText';
 
@@ -54,14 +55,12 @@ export default function MessageItem({ message, streaming }: Props) {
               {streaming ? (
                 <StreamingText text={message.content} />
               ) : (
-                <p className="whitespace-pre-wrap leading-relaxed">
-                  {message.content}
-                  {message.cancelled && (
-                    <span className="ml-1 text-slate-400 line-through">
-                      (已停止)
-                    </span>
-                  )}
-                </p>
+                <MarkdownMessage text={message.content} />
+              )}
+              {message.cancelled && !streaming && (
+                <span className="mt-1 block text-xs text-slate-400 line-through">
+                  (已停止)
+                </span>
               )}
               {message.sources && message.sources.length > 0 && !streaming && (
                 <ul className="mt-2 flex flex-wrap gap-1.5 border-t border-slate-100 pt-2">
