@@ -12,6 +12,11 @@ describe('buildAppConfig 默认值与开关(issue #9 相关)', () => {
     expect(c.llm.timeoutMs).toBe(180000);
   });
 
+  it('检索阈值(issue #89):默认 0=关闭,RAG_MIN_SCORE 可覆盖', () => {
+    expect(buildAppConfig({}).rag.minScore).toBe(0);
+    expect(buildAppConfig({ RAG_MIN_SCORE: '0.35' }).rag.minScore).toBe(0.35);
+  });
+
   it('限流默认值(issue #62):并发 1 + 每分钟 30 次', () => {
     const c = buildAppConfig({});
     expect(c.rateLimit.maxConcurrentPerSession).toBe(1);
@@ -67,8 +72,7 @@ describe('buildAppConfig 默认值与开关(issue #9 相关)', () => {
     expect(bad.plan.maxTokens).toBe(4096);
   });
 
-  it('RAG_HYBRID=0 / false 关闭混合检索', () => {
-    expect(buildAppConfig({ RAG_HYBRID: '0' }).rag.hybrid).toBe(false);
+  it('RAG_HYBRID=0 / false 关闭混合检索', () => {    expect(buildAppConfig({ RAG_HYBRID: '0' }).rag.hybrid).toBe(false);
     expect(buildAppConfig({ RAG_HYBRID: 'false' }).rag.hybrid).toBe(false);
     expect(buildAppConfig({ RAG_HYBRID: '1' }).rag.hybrid).toBe(true);
   });

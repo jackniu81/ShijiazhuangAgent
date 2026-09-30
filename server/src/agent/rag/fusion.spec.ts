@@ -1,5 +1,5 @@
-import { metaBoostScore, rrfFuse, RRF_K } from './fusion';
-import { DocMeta } from './rag.types';
+import { filterByCosine, metaBoostScore, rrfFuse, RRF_K } from './fusion';
+import { DocMeta, RetrievedDoc } from './rag.types';
 
 const meta = (over: Partial<DocMeta> = {}): DocMeta => ({
   title: 't',
@@ -46,5 +46,30 @@ describe('metaBoostScore(tag/region 规则 rerank)', () => {
 
   it('region 命中也有加分', () => {
     expect(metaBoostScore('井陉县怎么走', meta({ region: '井陉县' }))).toBeGreaterThan(0);
+  });
+});
+
+describe('filterByCosine 相关度阈值过滤 (issue #89)', () => {
+  const doc = (source: string): RetrievedDoc => ({
+    text: source,
+    source,
+    score: 0.03,
+    meta: { title: source, tags: [], source },
+  });
+  const docs = [doc('a.md'), doc('b.md')];
+
+  it('低于阈值的剔除,达标保留', () => {
+    const kept = filterByCosine(docs, [1, 0], [[1, 0], [0, 1]], 0.2);
+    expect(kept.map((d) => d.source)).toEqual(['a.md']);
+  });
+
+  it('边界:cos 恰等于阈值保留;向量缺失(cos=0)剔除', () => {
+    expect(filterByCosine([doc('a.md')], [1, 0], [[1, 0]], 1)).toHaveLength(1);
+    expect(filterByCosine([doc('a.md')], [1, 0], [[]], 0.01)).toHaveLength(0);
+  });
+
+  it('阈值 0 全通过(等价关闭);全部被过滤返回空数组即"无资料"', () => {
+    expect(filterByCosine(docs, [1, 0], [[1, 0], [0, 1]], 0)).toHaveLength(2);
+    expect(filterByCosine(docs, [1, 0], [[0, 1], [0, 1]], 0.2)).toEqual([]);
   });
 });

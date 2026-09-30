@@ -102,10 +102,12 @@ export const nodes = {
         logger.log(`retrieve query 改写: "${state.question}" → "${query}"`);
       }
       const search = () => deps.retrieve(query, deps.config.rag.topK);
+      // 阈值开启(minScore>0)且返回空 = 候选全部被过滤,标记后由回答注明无资料(issue #89)
+      const filteredEmpty = deps.config.rag.minScore > 0;
       const docs = emitProgress
         ? await tracked(deps, 'retrieve', '正在检索景点资料…', search)
         : (guardCancel(deps), await search());
-      return { docs };
+      return { docs, filteredEmpty: !docs.length && filteredEmpty };
     };
   },
 
@@ -174,8 +176,12 @@ export const nodes = {
         guardCancel(deps);
         throw new CancelledSignal();
       }
-      // RAG 降级时在完整 answer 中注明(流式 token 已过,前端以 chat:done.answer 为准)
-      if (!state.docs.length && deps.ragDegraded) {
+      // 无本地资料时在完整 answer 中注明(流式 token 已过,前端以 chat:done.answer 为准):
+      //  - 索引降级:检索不可用;
+      //  - 阈值全过滤(issue #89):检索到候选但相关度均低于 minScore。
+      if (!state.docs.length && state.filteredEmpty) {
+        answer += '\n(注:未检索到本地资料,以上回答基于模型常识)';
+      } else if (!state.docs.length && deps.ragDegraded) {
         answer += '\n(注:本地资料检索暂不可用,以上回答基于模型常识)';
       }
       guardCancel(deps);
