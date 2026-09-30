@@ -12,8 +12,11 @@ const doc = (title: string, source: string, text = '正文'): RetrievedDoc => ({
 const msg = (role: Msg['role'], content: string): Msg => ({ role, content });
 
 describe('chat.prompt', () => {
-  it('人设与抽出前逐字一致(行为无 diff 的回归锚点)', () => {
-    expect(CHAT_SYSTEM_PROMPT).toBe('你是石家庄旅游助手,基于提供的本地资料用中文自然回答,简洁友好。');
+  it('人设保持原样,并追加防幻觉事实性约束(issue #90)', () => {
+    expect(CHAT_SYSTEM_PROMPT.startsWith('你是石家庄旅游助手,基于提供的本地资料用中文自然回答,简洁友好。')).toBe(true);
+    expect(CHAT_SYSTEM_PROMPT).toContain('票价、开放时间、交通班次等具体事实只能引用参考资料中明确给出的内容');
+    expect(CHAT_SYSTEM_PROMPT).toContain('资料未提及,建议出行前核实');
+    expect(CHAT_SYSTEM_PROMPT).toContain('禁止编造任何数字或事实');
   });
 
   it('消息结构:system → history(截断至 turns*2)→ user', () => {
