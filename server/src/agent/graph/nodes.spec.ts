@@ -12,7 +12,7 @@ jest.mock('@nestjs/common', () => ({
 import { AgentEvents, AppErrorEvent, PlanDayEvent } from '@shijiazhuang-agent/shared';
 import { LLMProvider } from '../llm/llm.types';
 import { AppConfig } from '../../config/configuration';
-import { nodes } from './nodes';
+import { nodes, rewriteRetrieveQuery } from './nodes';
 import { CancelledSignal, ChatState, GraphDeps, PlanState } from './graph.types';
 
 /** 构造一个可控制 signal/取消 的最小问答节点依赖。 */
@@ -308,6 +308,69 @@ describe('nodes.plan 输出校验与自动重试 (#59)', () => {
     const res = await nodes.plan(d)(planState());
     expect(res.plan.days).toHaveLength(2);
     expect(planDaysOf(d)).toHaveLength(2);
+  });
+});
+
+// ────────────────────────────────────────────────────────────
+// 追问 query 改写(issue #88):retrieve 带 history 上下文
+// ────────────────────────────────────────────────────────────
+
+/** 记录 retrieve 节点实际下发的检索 query。 */
+function makeRetrieveDeps(): any {
+  const d = makeDeps({ isCancelled: () => false, signal: new AbortController().signal }) as any;
+  const queries: string[] = [];
+  d.retrieve = async (query: string) => {
+    queries.push(query);
+    return [];
+  };
+  d.queries = queries;
+  return d;
+}
+
+const chatState = (question: string, history: ChatState['history']): PlanState & ChatState =>
+  ({ question, sessionId: 's1', history, docs: [], input: { days: 1 } } as PlanState & ChatState);
+
+describe('nodes.retrieve 追问 query 改写 (#88)', () => {
+  it('无 history → 保持原拼接:question + 固定词', async () => {
+    const d = makeRetrieveDeps();
+    await nodes.retrieve(d, { emitProgress: false })(chatState('正定古城好玩吗', []));
+    expect(d.queries).toEqual(['正定古城好玩吗 石家庄 旅游']);
+  });
+
+  it('有 history → 拼入最近一轮 user 消息,追问能命中上轮话题', async () => {
+    const d = makeRetrieveDeps();
+    const history = [
+      { role: 'user', content: '正定古城好玩吗' },
+      { role: 'assistant', content: '挺好玩的,建议晚上去……' },
+    ] as ChatState['history'];
+    await nodes.retrieve(d, { emitProgress: false })(chatState('它门票多少钱', history));
+    expect(d.queries).toEqual(['正定古城好玩吗 它门票多少钱 石家庄 旅游']);
+  });
+
+  it('只取最近一条 user 消息,忽略更早话题', async () => {
+    const history = [
+      { role: 'user', content: '河北博物院值得去吗' },
+      { role: 'assistant', content: '值得' },
+      { role: 'user', content: '正定古城好玩吗' },
+      { role: 'assistant', content: '好玩' },
+    ] as ChatState['history'];
+    expect(rewriteRetrieveQuery('它门票多少钱', history)).toBe('正定古城好玩吗 它门票多少钱 石家庄 旅游');
+  });
+
+  it('超长历史消息截断至 30 字,assistant 消息不参与改写', () => {
+    const long = '游'.repeat(50);
+    const history = [{ role: 'assistant', content: '与检索无关的长回答' }] as ChatState['history'];
+    expect(rewriteRetrieveQuery('第二天怎么走', history)).toBe('第二天怎么走 石家庄 旅游');
+    expect(rewriteRetrieveQuery('第二天怎么走', [{ role: 'user', content: long }] as ChatState['history'])).toBe(
+      `${long.slice(0, 30)} 第二天怎么走 石家庄 旅游`,
+    );
+  });
+
+  it('plan 分支(无 question)不受影响,仍走 planQuery', async () => {
+    const d = makeRetrieveDeps();
+    const planStateInput = { input: { days: 2, interests: ['人文'] }, docs: [] } as unknown as PlanState & ChatState;
+    await nodes.retrieve(d, { emitProgress: false })(planStateInput);
+    expect(d.queries).toEqual(['石家庄 人文 旅游 行程 景点']);
   });
 });
 
