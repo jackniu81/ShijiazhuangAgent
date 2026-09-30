@@ -23,6 +23,8 @@ export interface AppConfig {
       baseUrl: string;
       chatModel: string;
       embedModel: string;
+      /** embed 批量接口每批条数(issue #93),缺省 64 */
+      embedBatchSize?: number;
     };
   };
   rag: {
@@ -109,6 +111,8 @@ export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig 
         baseUrl: env.OLLAMA_BASE_URL ?? 'http://localhost:11434',
         chatModel: env.OLLAMA_CHAT_MODEL ?? 'qwen2.5:7b',
         embedModel: env.OLLAMA_EMBED_MODEL ?? 'bge-m3',
+        // 批量条数上限:太小失去收益,太大撑大请求体,64 为本地 Ollama 的经验值(issue #93)
+        embedBatchSize: num(env.OLLAMA_EMBED_BATCH_SIZE, 64),
       },
     },
     rag: {
