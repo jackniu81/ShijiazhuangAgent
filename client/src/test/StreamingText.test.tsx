@@ -1,4 +1,4 @@
-﻿import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import StreamingText from '../components/StreamingText';
 
@@ -14,8 +14,13 @@ describe('StreamingText', () => {
     expect(cursor).not.toBeNull();
   });
 
-  it('supports whitespace-pre-wrap for multi-line streaming', () => {
-    const { container } = render(<StreamingText text="第一行\n第二行" />);
-    expect(container.querySelector('.whitespace-pre-wrap')).not.toBeNull();
+  it('renders markdown while streaming', () => {
+    render(<StreamingText text="**加粗**" />);
+    expect(screen.getByText('加粗').tagName).toBe('STRONG');
+  });
+
+  it('drops leading blank lines', () => {
+    const { container } = render(<StreamingText text={'\n\n第一行'} />);
+    expect(container.querySelector('p')?.textContent).toBe('第一行');
   });
 });
