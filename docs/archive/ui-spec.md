@@ -1,7 +1,7 @@
 # UI 规范 — 石家庄旅游助手 Chat 窗口
 
 > Task #3: Client 实现。基于 `docs/api-spec.md`，仅修改 `client/` 目录。
-> 📦 **已归档**（2026-09-26）:本规范已全部实现并超出(错误 toast、断线重连、plan:day 逐日流式渲染、chat.reducer 状态机);当前状态以代码为准,今后规划见 [roadmap.md](../roadmap.md)。
+> 📦 **已归档**（2026-09-26）:本规范已全部实现并超出(错误 toast、断线重连、plan:day 逐日流式渲染、chat.reducer 状态机);当前状态以代码为准,进度与剩余工作见 [docs/todo.md](../todo.md)。
 
 ## 1. 功能范围
 
