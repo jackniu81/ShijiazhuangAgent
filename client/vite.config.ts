@@ -23,11 +23,11 @@ export default defineConfig({
     // Easy local dev: forward /api to the NestJS server (port 3000)
     proxy: {
       '/api': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:8080',
         changeOrigin: true,
       },
       '/ws': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:8080',
         changeOrigin: true,
         ws: true,
       },
