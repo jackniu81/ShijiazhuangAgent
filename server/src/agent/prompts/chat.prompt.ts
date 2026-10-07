@@ -26,7 +26,7 @@ export function formatChatContext(docs: RetrievedDoc[], question: string): strin
   return (
     `CONTEXT:${contextTitles.join('、')}\n` +
     `参考资料:\n${fitDocsToBudget(blocks, CHAT_DOCS_BUDGET)}\n` +
-    `Q:${question}`
+    `当前问题:${question}`
   );
 }
 

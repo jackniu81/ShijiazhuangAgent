@@ -11,7 +11,7 @@ import {
   TravelPlan,
 } from '@shijiazhuang-agent/shared';
 import { LLMError } from '../llm/http';
-import { Msg } from '../llm/llm.types';
+import { Msg, TokenUsage } from '../llm/llm.types';
 import { buildChatMessages } from '../prompts/chat.prompt';
 import { buildPlanMessages, buildPlanRepairMessages } from '../prompts/plan.prompt';
 import { uniqueSources, uniqueTitles } from '../prompts/util';
@@ -150,7 +150,11 @@ export const nodes = {
     return async (state: ChatState) => {
       guardCancel(deps);
       const msgs = buildChatMessages(state, deps.config.chat.historyTurns);
-      logger.log(`LLM 查询: ${JSON.stringify(msgs)}`);
+      logger.log(`LLM 查询 ${msgs.length}条记录:`);
+      msgs.map((msg) => logger.log(JSON.stringify(msg)));
+      // 执行过程观测:记录耗时与 provider 回传的 token 用量(见 ChatOptions.onUsage)。
+      const startedAt = Date.now();
+      let usage: TokenUsage | undefined;
       let answer = '';
       const sources = uniqueSources(state.docs);
       answer = await deps.llm.stream(
@@ -168,6 +172,9 @@ export const nodes = {
           temperature: deps.config.chat.temperature,
           maxTokens: deps.config.chat.maxTokens,
           signal: deps.signal,
+          onUsage: (u) => {
+            usage = u;
+          },
         },
       );
       // 取消/超时会 abort 信号,分两种收尾:
@@ -185,6 +192,15 @@ export const nodes = {
       } else if (!state.docs.length && deps.ragDegraded) {
         answer += '\n(注:本地资料检索暂不可用,以上回答基于模型常识)';
       }
+      logger.log(
+        `LLM 执行过程: provider=${deps.llm.name}, 耗时=${Date.now() - startedAt}ms, ` +
+          `输入消息=${msgs.length}条, 温度=${deps.config.chat.temperature}, maxTokens=${deps.config.chat.maxTokens}, ` +
+          `token用量=${JSON.stringify(usage ?? {})}`,
+      );
+      // "工具"= RAG 检索命中:输出命中切块数、来源与相关度,便于核对回答依据。
+      logger.log(`LLM 检索工具: 命中 ${state.docs.length} 个切块, 来源=${JSON.stringify(sources)}`);
+      state.docs.forEach((d) => logger.log(`  - [${d.score.toFixed(3)}] ${d.source}`));
+      logger.log(`LLM 回答(长度 ${answer.length} 字): ${answer}`);
       guardCancel(deps);
       deps.emit(AgentEvents.CHAT_DONE, {
         requestId: deps.requestId,

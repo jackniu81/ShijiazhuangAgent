@@ -30,7 +30,7 @@ describe('chat.prompt', () => {
     expect(msgs[msgs.length - 1].role).toBe('user');
   });
 
-  it('user 消息含 CONTEXT/参考资料/Q 三段,标题去重且 CONTEXT 最多 4 个', () => {
+  it('user 消息含 CONTEXT/参考资料/当前问题 三段,标题去重且 CONTEXT 最多 4 个', () => {
     const docs = [
       doc('A', 'a.md'),
       doc('A', 'a.md'), // 重复标题
@@ -44,13 +44,13 @@ describe('chat.prompt', () => {
     expect(user).not.toContain('CONTEXT:A、B、C、D、E');
     expect(user).toContain('## A\n正文');
     expect(user).toContain('## E');
-    expect(user.endsWith('Q:怎么去')).toBe(true);
+    expect(user.endsWith('当前问题:怎么去')).toBe(true);
   });
 
   it('无资料时参考资料为空段但格式保持', () => {
     const user = formatChatContext([], '你好');
     expect(user).toContain('CONTEXT:\n');
-    expect(user).toContain('Q:你好');
+    expect(user).toContain('当前问题:你好');
   });
 
   it('参考资料块:超预算单条按句子边界截,残句以省略号收尾(issue #91)', () => {
@@ -58,7 +58,7 @@ describe('chat.prompt', () => {
     const big = doc('大山', 'big.md', sentence.repeat(120)); // 2640 字
     const user = formatChatContext([big], 'q');
     expect(user.length).toBeLessThanOrEqual(2110);
-    const body = user.split('参考资料:\n')[1].split('\nQ:')[0];
+    const body = user.split('参考资料:\n')[1].split('\n当前问题:')[0];
     expect(body.endsWith('…')).toBe(true);
     // 不在半句/半词中间收尾:截断点必须落在标点之后
     expect(body.slice(0, -1)).toMatch(/[,，、;:：。!?！？]$/);
@@ -68,6 +68,6 @@ describe('chat.prompt', () => {
     const docs = Array.from({ length: 10 }, (_, i) => doc(`D${i}`, `d${i}.md`, `第${i}条资料,内容完整。`));
     const user = formatChatContext(docs, 'q');
     for (const d of docs) expect(user).toContain(d.text);
-    expect(user.split('参考资料:\n')[1].split('\nQ:')[0]).not.toContain('…');
+    expect(user.split('参考资料:\n')[1].split('\n当前问题:')[0]).not.toContain('…');
   });
 });
