@@ -45,6 +45,25 @@ describe('MessageItem', () => {
     expect(screen.getByText(/📎 景点\/正定古城\.md/)).toBeInTheDocument();
   });
 
+  it('renders assistant content as markdown without leading blank line', () => {
+    const msg: ChatMessage = {
+      id: 'a5',
+      role: 'assistant',
+      kind: 'text',
+      content: '\n\n## 推荐\n- 隆兴寺',
+      timestamp: t,
+    };
+    const { container } = render(<MessageItem message={msg} />);
+    expect(container.querySelector('h3')?.textContent).toBe('推荐');
+    expect(container.querySelector('li')?.textContent).toBe('隆兴寺');
+    const ps = container.querySelectorAll('p');
+    // 首段之前的空段落不应存在(时间戳的 p 除外)
+    const bubble = container.querySelector('li')!.closest('div')!;
+    const first = bubble.querySelector('p');
+    expect(first?.textContent).not.toBe('');
+    expect(ps.length).toBeGreaterThan(0);
+  });
+
   it('renders cancelled assistant with strikethrough', () => {
     const msg: ChatMessage = {
       id: 'a2',

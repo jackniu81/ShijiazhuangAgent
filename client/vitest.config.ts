@@ -4,37 +4,18 @@ import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vitest/config';
 import pkg from './package.json' with { type: 'json' };
 
-// https://vite.dev/config/
+// React 19.3 与 @vitejs/plugin-react 的 React Refresh(babel 注入)在 jsdom 采集阶段报错，
+// 测试环境用 oxc 的 jsxOnly 转换,不注入 refresh;dev/build 仍走 vite.config.ts 的完整插件。
 export default defineConfig({
-  plugins: [react(), tailwindcss()],
+  plugins: [react({ jsxOnly: true }), tailwindcss()],
   resolve: {
     alias: {
-      // workspace 共享类型包:dev/test 直接消费 TS 源码,免预编译
       '@shijiazhuang-agent/shared': fileURLToPath(new URL('../packages/shared/src/index.ts', import.meta.url)),
     },
   },
   define: {
-    // Injected build-time constants, available as globals in the app
     __APP_VERSION__: JSON.stringify(pkg.version),
     __BUILD_TIME__: JSON.stringify(new Date().toISOString()),
-  },
-  server: {
-    port: 5173,
-    // Easy local dev: forward /api to the NestJS server (port 3000)
-    proxy: {
-      '/api': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-      },
-      '/ws': {
-        target: 'http://localhost:8080',
-        changeOrigin: true,
-        ws: true,
-      },
-    },
-  },
-  build: {
-    outDir: 'dist',
   },
   test: {
     globals: true,
