@@ -61,6 +61,7 @@ function makeConfig(over: Partial<AppConfig['llm']> & Partial<AppConfig['chat']>
       questionMaxLen: over.questionMaxLen ?? 500,
       temperature: 0.7,
       maxTokens: 2048,
+      weather: { enabled: true },
     },
     plan: { temperature: 0.2, maxTokens: 4096 },
     rateLimit: { maxConcurrentPerSession: 1, perWindow: 30, windowMs: 60_000 },

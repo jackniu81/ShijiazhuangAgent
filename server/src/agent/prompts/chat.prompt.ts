@@ -17,14 +17,18 @@ export interface ChatPromptInput {
   question: string;
   history: Msg[];
   docs: RetrievedDoc[];
+  /** weather 节点产出的天气文本,无具体日期时为空 */
+  weather?: string;
 }
 
 /** 参考资料块:标题 + 正文,预算内按 doc 逐条装入、单条按句子边界截(issue #91)。 */
-export function formatChatContext(docs: RetrievedDoc[], question: string): string {
+export function formatChatContext(docs: RetrievedDoc[], question: string, weather?: string): string {
   const contextTitles = uniqueTitles(docs).slice(0, 4);
   const blocks = docs.map((d) => `## ${d.meta.title}\n${d.text}`);
   return (
     `CONTEXT:${contextTitles.join('、')}\n` +
+    // 天气放在参考资料前,标明仅供参考,不作为事实依据
+    (weather ? `天气参考(${weather}):仅辅助出行建议,不作为事实依据\n` : '') +
     `参考资料:\n${fitDocsToBudget(blocks, CHAT_DOCS_BUDGET)}\n` +
     `当前问题:${question}`
   );
@@ -35,6 +39,6 @@ export function buildChatMessages(input: ChatPromptInput, historyTurns: number):
   return [
     { role: 'system', content: CHAT_SYSTEM_PROMPT },
     ...history,
-    { role: 'user', content: formatChatContext(input.docs, input.question) },
+    { role: 'user', content: formatChatContext(input.docs, input.question, input.weather) },
   ];
 }

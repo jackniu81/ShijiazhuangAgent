@@ -1,6 +1,7 @@
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
 import type { Msg } from '../llm/llm.types';
 import type { RetrievedDoc } from '../rag/rag.types';
+import { extractTripDate } from '../tools/weather.tool';
 import { ChatState, GraphDeps } from './graph.types';
 import { nodes } from './nodes';
 
@@ -31,15 +32,31 @@ const ChatAnnotation = Annotation.Root({
     reducer: (_prev, next) => next,
     default: () => false,
   }),
+  // weather 节点产出,仅在问题含具体日期时有值
+  weather: Annotation<string | undefined>({
+    reducer: (_prev, next) => next,
+    default: () => undefined,
+  }),
 });
 
-/** retrieve → generate → END */
+/** 问题里有具体日期且开关开启时才走天气查询,普通问答不受额外延迟影响。 */
+function routeAfterRetrieve(deps: GraphDeps) {
+  return (state: ChatState): 'weatherStep' | 'generate' =>
+    deps.config.chat.weather.enabled && extractTripDate(state.question) ? 'weatherStep' : 'generate';
+}
+
+/** retrieve →(有具体日期?weatherStep)→ generate → END(节点名避开 `weather` 通道) */
 function buildChatGraph(deps: GraphDeps) {
   return new StateGraph(ChatAnnotation)
     .addNode('retrieve', nodes.retrieve(deps, { emitProgress: false }) as never)
+    .addNode('weatherStep', nodes.weather(deps) as never)
     .addNode('generate', nodes.generate(deps) as never)
     .addEdge(START, 'retrieve')
-    .addEdge('retrieve', 'generate')
+    .addConditionalEdges('retrieve', routeAfterRetrieve(deps) as never, [
+      'weatherStep',
+      'generate',
+    ])
+    .addEdge('weatherStep', 'generate')
     .addEdge('generate', END)
     .compile();
 }
