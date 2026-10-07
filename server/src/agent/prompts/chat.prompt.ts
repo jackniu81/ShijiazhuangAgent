@@ -7,7 +7,6 @@ import { fitDocsToBudget, uniqueTitles } from './util';
 /** 参考资料块总预算(与原整体 slice(0,2000) 保持一致)。 */
 const CHAT_DOCS_BUDGET = 2000;
 
-/** 人设:问答助手 + 防幻觉事实性约束(issue #90)。 */
 export const CHAT_SYSTEM_PROMPT =
   '你是石家庄旅游助手,基于提供的本地资料用中文自然回答,简洁友好。' +
   '票价、开放时间、交通班次等具体事实只能引用参考资料中明确给出的内容;' +
