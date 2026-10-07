@@ -1,4 +1,4 @@
-import { ChatOptions, LLMProvider, Msg } from './llm.types';
+import { ChatOptions, LLMProvider, Msg, TokenUsage } from './llm.types';
 import { LLMError, postJson, readLines, toProviderMessages, withRetry } from './http';
 
 export interface SiliconFlowOptions {
@@ -30,6 +30,7 @@ export class SiliconFlowProvider implements LLMProvider {
         this.headers(),
         { timeoutMs: this.opts.timeoutMs, signal: options?.signal },
       );
+      this.emitUsage(json?.usage, options);
       return (json?.choices?.[0]?.message?.content as string) ?? '';
     });
   }
@@ -71,6 +72,8 @@ export class SiliconFlowProvider implements LLMProvider {
             full += token;
             onToken(token);
           }
+          // 开启 stream_options.include_usage 后,末帧携带 usage(choices 为空)。
+          if (chunk?.usage) this.emitUsage(chunk.usage, options);
         });
         return full;
       } catch (err) {
@@ -114,7 +117,20 @@ export class SiliconFlowProvider implements LLMProvider {
       ...(options?.maxTokens !== undefined ? { max_tokens: options.maxTokens } : {}),
       // JSON 强约束只对非流式生效(issue #87):流式下 response_format 会破坏增量返回
       ...(!stream && options?.jsonMode ? { response_format: { type: 'json_object' } } : {}),
+      // 仅在需要观测 token 时让末帧额外返回 usage,缺省不改变请求体
+      ...(stream && options?.onUsage ? { stream_options: { include_usage: true } } : {}),
     };
+  }
+
+  /** 将 OpenAI 兼容的 usage 字段归一后回调(无 onUsage 或未返回 usage 时静默跳过)。 */
+  private emitUsage(usage: any, options?: ChatOptions): void {
+    if (!options?.onUsage || !usage) return;
+    const u: TokenUsage = {
+      promptTokens: usage.prompt_tokens,
+      completionTokens: usage.completion_tokens,
+      totalTokens: usage.total_tokens,
+    };
+    options.onUsage(u);
   }
 
   private composedSignal(options?: ChatOptions): { signal: AbortSignal; dispose: () => void } {

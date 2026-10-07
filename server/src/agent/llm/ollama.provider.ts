@@ -63,6 +63,7 @@ export class OllamaProvider implements LLMProvider {
         {},
         { timeoutMs: this.opts.timeoutMs, signal: options?.signal },
       );
+      this.emitUsage(json, options);
       return (json?.message?.content as string) ?? '';
     });
   }
@@ -112,7 +113,11 @@ export class OllamaProvider implements LLMProvider {
             full += token;
             onToken(token);
           }
-          if (chunk?.done) return false;
+          if (chunk?.done) {
+            // 流式末帧(done:true)携带 prompt_eval_count / eval_count。
+            this.emitUsage(chunk, options);
+            return false;
+          }
         });
         return full;
       } catch (err) {
@@ -132,6 +137,19 @@ export class OllamaProvider implements LLMProvider {
     if (options?.temperature !== undefined) o.temperature = options.temperature;
     if (options?.maxTokens !== undefined) o.num_predict = options.maxTokens;
     return Object.keys(o).length ? { options: o } : {};
+  }
+
+  /** 将 Ollama 的 eval 计数归一后回调(无 onUsage 或字段缺失时静默跳过)。 */
+  private emitUsage(chunk: any, options?: ChatOptions): void {
+    if (!options?.onUsage || !chunk) return;
+    const prompt = chunk.prompt_eval_count as number | undefined;
+    const completion = chunk.eval_count as number | undefined;
+    if (prompt === undefined && completion === undefined) return;
+    options.onUsage({
+      promptTokens: prompt,
+      completionTokens: completion,
+      totalTokens: (prompt ?? 0) + (completion ?? 0),
+    });
   }
 
   /**

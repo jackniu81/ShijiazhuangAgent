@@ -19,8 +19,10 @@ export class MockProvider implements LLMProvider {
     this.streamDelayMs = options.streamDelayMs ?? 150;
   }
 
-  async chat(messages: Msg[], _options?: ChatOptions): Promise<string> {
-    return this.composeAnswer(messages);
+  async chat(messages: Msg[], options?: ChatOptions): Promise<string> {
+    const answer = this.composeAnswer(messages);
+    this.emitUsage(messages, answer, options);
+    return answer;
   }
 
   async stream(
@@ -36,6 +38,7 @@ export class MockProvider implements LLMProvider {
       onToken(token);
       await sleep(this.streamDelayMs);
     }
+    this.emitUsage(messages, answer, options);
     return answer;
   }
 
@@ -44,6 +47,20 @@ export class MockProvider implements LLMProvider {
   }
 
   // ---------- internals ----------
+
+  /** mock 无真实模型计量:以字符数估算 token(中文约 2 字/ token)回调用。 */
+  private emitUsage(messages: Msg[], answer: string, options?: ChatOptions): void {
+    if (!options?.onUsage) return;
+    const promptChars = messages.reduce((n, m) => n + m.content.length, 0);
+    const est = (chars: number) => Math.ceil(chars / 2);
+    const promptTokens = est(promptChars);
+    const completionTokens = est(answer.length);
+    options.onUsage({
+      promptTokens,
+      completionTokens,
+      totalTokens: promptTokens + completionTokens,
+    });
+  }
 
   private embedOne(text: string): number[] {
     const vec = new Array<number>(this.dim).fill(0);
@@ -59,7 +76,7 @@ export class MockProvider implements LLMProvider {
   private composeAnswer(messages: Msg[]): string {
     const lastUser = [...messages].reverse().find((m) => m.role === 'user');
     const content = lastUser?.content ?? '';
-    const question = extractBetween(content, 'Q:', '\n') ?? content.trim();
+    const question = extractBetween(content, '当前问题:', '\n') ?? content.trim();
     const docs = (extractBetween(content, 'CONTEXT:', '\n') ?? '')
       .split(/[;；|、]/)
       .map((s) => s.trim())
