@@ -447,6 +447,40 @@ describe('nodes.generate 无资料注记 (issue #89)', () => {
 });
 
 // ────────────────────────────────────────────────────────────
+// weather 节点:问题含具体日期才查天气,结果写入 weather 通道
+// ────────────────────────────────────────────────────────────
+
+describe('nodes.weather', () => {
+  const weatherDeps = (): any =>
+    makeDeps({ isCancelled: () => false, signal: new AbortController().signal });
+
+  it('问题含"明天" → 返回该日天气文本', async () => {
+    const d = weatherDeps();
+    const res = await nodes.weather(d)({ ...state, question: '明天去正定合适吗' });
+    expect(res.weather).toContain('石家庄');
+    expect(res.weather).toContain('℃');
+  });
+
+  it('问题不含时间 → 不写 weather 通道', async () => {
+    const d = weatherDeps();
+    const res = await nodes.weather(d)({ ...state, question: '正定古城好玩吗' });
+    expect(res).toEqual({});
+  });
+
+  it('进入即取消 → 抛 CancelledSignal 并上报 CANCELLED', async () => {
+    const ctrl = new AbortController();
+    const d = makeDeps({ isCancelled: () => true, signal: ctrl.signal }) as any;
+    ctrl.abort();
+    await expect(nodes.weather(d)({ ...state, question: '明天去正定' })).rejects.toBeInstanceOf(
+      CancelledSignal,
+    );
+    const errs = d.emitted.filter((e: any) => e.event === AgentEvents.APP_ERROR);
+    expect(errs).toHaveLength(1);
+    expect((errs[0].data as AppErrorEvent).code).toBe('CANCELLED');
+  });
+});
+
+// ────────────────────────────────────────────────────────────
 // 生成参数透传(issue #86):chat/plan 按场景下发 temperature/maxTokens
 // ────────────────────────────────────────────────────────────
 

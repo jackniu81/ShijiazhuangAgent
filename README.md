@@ -19,7 +19,7 @@
 | # | 能力 | 业务入口 | 为什么是独立能力 |
 |---|------|---------|-----------------|
 | 1 | **行程规划** | WS `plan:create` → `plan:progress` / `plan:day` / `plan:result` | 填天数、兴趣即得**逐日流式**行程；专属状态图（retrieve → planStep → refine → done，结构校验与回炉在 plan 节点内）与专属表单/卡片 |
-| 2 | **自由问答** | WS `chat:ask` → `chat:token` / `chat:done` | 多轮咨询，独立状态图（retrieve → generate），带历史上下文与追问 query 改写 |
+| 2 | **自由问答** | WS `chat:ask` → `chat:token` / `chat:done` | 多轮咨询，独立状态图（retrieve →〔问题含具体日期时 weather〕→ generate），带历史上下文、追问 query 改写与天气参考 |
 | 3 | **任务管控** | WS `task:cancel` + 统一错误事件 `app:error` | 流式生成按 `requestId` 可中断（透传到 LLM HTTP 层），异常统一收敛为错误契约并支撑前端一键重试 |
 | 4 | **会话服务** | 连接建立 + `sessionId` 契约 | 会话创建/恢复、历史携带、TTL 清扫、IP+会话双维度限流（#62）、连接鉴权（#61） |
 | 5 | **旅游知识库** | `data/` 语料 + front-matter，启动自动索引 | 独立运营的内容资产（景点/美食/酒店/交通/线路/特产），支撑所有链路的领域知识 |
@@ -144,6 +144,7 @@ server/                       # NestJS 12 + LangGraph 后端(jest 20 suites)
 │   ├── agent.service.ts      # 编排 chat/plan 双图
 │   ├── graph/                # 两张图 + nodes + plan.schema(zod 校验/回炉)
 │   ├── prompts/              # chat/plan 模板 + util(边界截断、预算装载)
+│   ├── tools/                # weather.tool(日期识别 + mock 天气,仅 chat 图)
 │   ├── rag/                  # bm25 / fusion(RRF+rerank) / store / pg-vector.store / indexer
 │   ├── chat/                 # session.store(内存 + TTL)
 │   ├── llm/                  # http(重试/超时/取消/流式解析) + 三 Provider + factory

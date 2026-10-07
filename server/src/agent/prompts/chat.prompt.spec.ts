@@ -53,6 +53,24 @@ describe('chat.prompt', () => {
     expect(user).toContain('当前问题:你好');
   });
 
+  it('有天气参考时插在参考资料之前,并声明不作为事实依据', () => {
+    const user = formatChatContext([doc('正定古城', 'a.md')], '明天去怎么样', '2026年10月8日石家庄:晴,8~19℃');
+    expect(user).toContain('天气参考(2026年10月8日石家庄:晴,8~19℃):仅辅助出行建议,不作为事实依据\n');
+    expect(user.indexOf('天气参考')).toBeLessThan(user.indexOf('参考资料:'));
+  });
+
+  it('无天气时 user 消息不含天气行(与原格式逐字一致)', () => {
+    expect(formatChatContext([], '你好')).not.toContain('天气参考');
+  });
+
+  it('buildChatMessages 透传 state.weather 到 user 消息', () => {
+    const msgs = buildChatMessages(
+      { question: '明天去正定', history: [], docs: [], weather: '2026年10月8日石家庄:晴' },
+      6,
+    );
+    expect(msgs[msgs.length - 1].content).toContain('天气参考(2026年10月8日石家庄:晴)');
+  });
+
   it('参考资料块:超预算单条按句子边界截,残句以省略号收尾(issue #91)', () => {
     const sentence = '正定古城位于石家庄北郊,夜景灯光很亮. '; // 22 字
     const big = doc('大山', 'big.md', sentence.repeat(120)); // 2640 字

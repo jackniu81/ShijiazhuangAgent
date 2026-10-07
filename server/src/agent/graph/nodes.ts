@@ -16,6 +16,7 @@ import { buildChatMessages } from '../prompts/chat.prompt';
 import { buildPlanMessages, buildPlanRepairMessages } from '../prompts/plan.prompt';
 import { uniqueSources, uniqueTitles } from '../prompts/util';
 import { RetrievedDoc } from '../rag/rag.types';
+import { extractTripDate, lookupWeather } from '../tools/weather.tool';
 import { CancelledSignal, ChatState, GraphDeps, PlanState } from './graph.types';
 import { validatePlanJson } from './plan.schema';
 
@@ -142,6 +143,21 @@ export const nodes = {
       deps.emit(AgentEvents.PLAN_RESULT, { requestId: deps.requestId, plan: state.plan } as PlanResultEvent);
       emitProgress(deps, 'done', 'finish');
       return {};
+    };
+  },
+
+  /**
+   * 天气 tool:问题含具体出行日期时查该日天气文本,写入 weather 通道供 generate
+   * 作为参考资料。当前为本地 mock 实现,无日期时由图的条件边跳过,不发查询。
+   */
+  weather(deps: GraphDeps) {
+    return async (state: ChatState) => {
+      guardCancel(deps);
+      const trip = extractTripDate(state.question);
+      if (!trip) return {};
+      const weather = lookupWeather(trip.date);
+      logger.log(`天气工具: 命中日期"${trip.label}"→${trip.date}, ${weather}`);
+      return { weather };
     };
   },
 

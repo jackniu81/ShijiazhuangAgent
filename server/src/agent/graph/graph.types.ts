@@ -36,6 +36,8 @@ export interface ChatState {
   answer?: string;
   /** 阈值过滤(issue #89)生效且候选全部被过滤时为 true,回答注明未检索到本地资料 */
   filteredEmpty?: boolean;
+  /** 问题中含具体日期时,weather 节点查到的天气文本,作为 prompt 的参考资料 */
+  weather?: string;
 }
 
 /** 节点边界检测到取消时抛出,用于中断 LangGraph 执行。 */
