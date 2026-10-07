@@ -84,6 +84,7 @@ export class RagService implements OnModuleInit, OnModuleDestroy {
     const { minScore } = this.config.rag;
     try {
       const docs = await this.store.searchByText(query, embedder, k);
+      this.logger.log(`RAG 检索结果:${docs.length} 个文档. 准备过滤：${minScore}`);
       docs.map((d) => this.logger.log(`RAG 检索结果:${d.source}, ${d.score}`));
       if (!(minScore > 0) || !docs.length) return docs;
       // 相关度阈值过滤(issue #89):一次批量向量化,按余弦分剔除低分文档

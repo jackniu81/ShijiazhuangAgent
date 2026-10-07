@@ -150,6 +150,7 @@ export const nodes = {
     return async (state: ChatState) => {
       guardCancel(deps);
       const msgs = buildChatMessages(state, deps.config.chat.historyTurns);
+      logger.log(`LLM 查询: ${JSON.stringify(msgs)}`);
       let answer = '';
       const sources = uniqueSources(state.docs);
       answer = await deps.llm.stream(
