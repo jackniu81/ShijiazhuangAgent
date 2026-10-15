@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import AboutButton from './AboutButton';
 import ConnectionStatus from './ConnectionStatus';
 
 interface Props {
@@ -14,7 +15,10 @@ export default function Layout({ children, footer }: Props) {
           <span className="text-lg font-semibold tracking-tight">
             石家庄旅游助手
           </span>
-          <ConnectionStatus />
+          <div className="flex items-center gap-3">
+            <AboutButton />
+            <ConnectionStatus />
+          </div>
         </div>
       </header>
 
