@@ -59,6 +59,8 @@ export interface AppConfig {
     maxToolRounds: number;
     /** 天气工具开关 */
     weatherEnabled: boolean;
+    /** 网站查询(web_search)工具开关,灰度控制实时信息联网查询 */
+    webSearchEnabled: boolean;
     /** rag_attraction 工具检索 topK */
     ragToolTopK: number;
     /** analyze 节点 LLM 化灰度开关(chat-tools-spec P4):关=规则短路,开=LLM JSON 判断 */
@@ -145,6 +147,7 @@ export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig 
       maxTokens: num(env.CHAT_MAX_TOKENS, 2048),
       maxToolRounds: int(env.CHAT_MAX_TOOL_ROUNDS, 3),
       weatherEnabled: bool(env.CHAT_WEATHER_ENABLED, false),
+      webSearchEnabled: bool(env.CHAT_WEB_SEARCH_ENABLED, false),
       ragToolTopK: int(env.CHAT_RAG_TOOL_TOPK, 3),
       analyzeLlmEnabled: bool(env.CHAT_ANALYZE_LLM_ENABLED, false),
     },

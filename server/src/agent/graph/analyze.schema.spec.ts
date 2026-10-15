@@ -67,9 +67,12 @@ describe('parseAnalyzeToolCalls', () => {
 describe('selectAnalyzeToolCall', () => {
   const baseCtx = () => ({
     weatherEnabled: true,
+    webSearchEnabled: true,
     docTitles: new Set<string>(['正定古城']),
     weatherDone: false,
     ragDone: new Set<string>(),
+    webDone: new Set<string>(),
+    now: NOW,
   });
 
   it('weather:开关关闭/日期超范围/已查过 → 均不选中', () => {

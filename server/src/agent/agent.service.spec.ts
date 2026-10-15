@@ -63,6 +63,7 @@ function makeConfig(over: Partial<AppConfig['llm']> & Partial<AppConfig['chat']>
       maxTokens: 2048,
       maxToolRounds: 3,
       weatherEnabled: false,
+      webSearchEnabled: false,
       ragToolTopK: 3,
       analyzeLlmEnabled: false,
     },

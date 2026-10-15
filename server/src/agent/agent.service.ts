@@ -15,6 +15,7 @@ import { LLM_PROVIDER } from './llm/llm.factory';
 import { LLMProvider } from './llm/llm.types';
 import { RagService } from './rag/rag.service';
 import { mockWeather } from './weather/mock.weather';
+import { mockWebSearch } from './web/mock.web';
 import { APP_CONFIG, AppConfig } from '../config/configuration';
 
 /** 向当前连接的 client 发送事件的回调,由 Gateway 注入。 */
@@ -129,6 +130,8 @@ export class AgentService {
       // P3: 先注入 mock 数据源(确定性、无外部依赖),P5 替换为真实天气 API;
       // 是否实际调用仍由 config.chat.weatherEnabled 经 analyze 路由控制。
       weather: mockWeather,
+      // 网站查询同样先注入 mock 数据源,是否调用由 config.chat.webSearchEnabled 经 analyze 路由控制。
+      webSearch: mockWebSearch,
       config: this.config,
       emit,
       requestId,

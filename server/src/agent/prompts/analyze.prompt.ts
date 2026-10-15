@@ -13,8 +13,10 @@ export const ANALYZE_SYSTEM_PROMPT =
   'params:{"date":"YYYY-MM-DD","city"?:string}。相对日期(今天/明天/后天/下周二等)需换算为绝对日期。\n' +
   '- rag_attraction: 补充检索景点资料。仅当问题提到的景点不在"已覆盖景点"中、且需要其资料才能回答时调用,' +
   'params:{"attraction":string}。\n' +
+  '- web_search: 网站查询实时信息。仅当本地资料未覆盖、且问题需要最新的开放时间/票价/预约/活动/政策等实时信息时调用,' +
+  'params:{"query":string}。query 应为简洁的检索关键词。\n' +
   '规则:每轮最多返回 1 个工具调用;已执行过的工具不要重复;都不需要时返回 {"toolCalls":[]}。\n' +
-  'schema: {"toolCalls":[{"name":"weather"|"rag_attraction","params":object}]}';
+  'schema: {"toolCalls":[{"name":"weather"|"rag_attraction"|"web_search","params":object}]}';
 
 export interface AnalyzePromptInput {
   question: string;
@@ -34,7 +36,9 @@ export function buildAnalyzeMessages(input: AnalyzePromptInput): Msg[] {
         .map((r) =>
           r.name === 'rag_attraction'
             ? `rag_attraction(attraction=${String(r.params.attraction ?? '')})`
-            : `weather(date=${String(r.params.date ?? '')})`,
+            : r.name === 'web_search'
+              ? `web_search(query=${String(r.params.query ?? '')})`
+              : `weather(date=${String(r.params.date ?? '')})`,
         )
         .join('、')
     : '无';
