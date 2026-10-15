@@ -12,8 +12,8 @@ export interface GraphDeps {
   retrieve: (query: string, k?: number) => Promise<RetrievedDoc[]>;
   /** 天气查询函数,由 AgentService 注入;缺省时 weather 工具返回"不可用" */
   weather?: (date: string, city?: string) => Promise<string>;
-  /** 网站查询函数(实时信息),由 AgentService 注入;缺省时 web_search 工具返回"未找到" */
-  webSearch?: (query: string) => Promise<string>;
+  /** 网站查询函数(实时信息),由 AgentService 注入;缺省时 web_search 工具返回"未找到"。signal 用于中断在途联网请求 */
+  webSearch?: (query: string, signal?: AbortSignal) => Promise<string>;
   config: AppConfig;
   emit: Emit;
   requestId: string;

@@ -361,7 +361,7 @@ export const nodes = {
       } else {
         try {
           output = deps.webSearch
-            ? await deps.webSearch(query)
+            ? await deps.webSearch(query, deps.signal)
             : `未找到关于「${query}」的联网信息。`;
         } catch {
           output = '网站查询服务暂不可用';
