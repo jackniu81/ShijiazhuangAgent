@@ -12,6 +12,8 @@ export interface GraphDeps {
   retrieve: (query: string, k?: number) => Promise<RetrievedDoc[]>;
   /** 天气查询函数,由 AgentService 注入;缺省时 weather 工具返回"不可用" */
   weather?: (date: string, city?: string) => Promise<string>;
+  /** 网站查询函数(实时信息),由 AgentService 注入;缺省时 web_search 工具返回"未找到" */
+  webSearch?: (query: string) => Promise<string>;
   config: AppConfig;
   emit: Emit;
   requestId: string;
@@ -30,7 +32,7 @@ export interface PlanState {
 }
 
 export interface ToolCall {
-  name: 'weather' | 'rag_attraction';
+  name: 'weather' | 'rag_attraction' | 'web_search';
   params: Record<string, unknown>;
 }
 

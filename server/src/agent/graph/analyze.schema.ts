@@ -52,7 +52,7 @@ export function parseAnalyzeToolCalls(raw: string): ToolCall[] {
   const out: ToolCall[] = [];
   for (const item of arr) {
     if (!isRecord(item) || !isRecord(item.params)) continue;
-    if (item.name === 'weather' || item.name === 'rag_attraction') {
+    if (item.name === 'weather' || item.name === 'rag_attraction' || item.name === 'web_search') {
       out.push({ name: item.name, params: item.params });
     }
   }
@@ -62,16 +62,23 @@ export function parseAnalyzeToolCalls(raw: string): ToolCall[] {
 export interface AnalyzeSelectionContext {
   /** weather 灰度开关,关时即使模型要求也不调用 */
   weatherEnabled: boolean;
+  /** web_search 灰度开关,关时即使模型要求也不调用 */
+  webSearchEnabled: boolean;
   /** baseline + rag_tool 已覆盖的景点标题集合 */
   docTitles: Set<string>;
   weatherDone: boolean;
   ragDone: Set<string>;
+  /** 已执行过网站查询的 query 集合,避免重复检索 */
+  webDone: Set<string>;
+  /** 基准"今天"(测试注入用),默认取系统当前日期 */
+  now?: Date;
 }
 
 /**
  * 语义校验后选出本轮唯一可执行调用(串行调度,§3):
  * - weather:开关开、日期 0~5 天内、未查过;
- * - rag_attraction:景点名非空、未被 docs 覆盖、未查过。
+ * - rag_attraction:景点名非空、未被 docs 覆盖、未查过;
+ * - web_search:开关开、query 非空、未查过。
  * 全部不合法 → undefined(直接进入 generate)。
  */
 export function selectAnalyzeToolCall(
@@ -81,9 +88,15 @@ export function selectAnalyzeToolCall(
   for (const call of calls) {
     if (call.name === 'weather') {
       if (!ctx.weatherEnabled || ctx.weatherDone) continue;
-      const diff = daysFromToday(call.params.date);
+      const diff = daysFromToday(call.params.date, ctx.now);
       if (diff === null || diff < 0 || diff > 5) continue;
       return call;
+    }
+    if (call.name === 'web_search') {
+      if (!ctx.webSearchEnabled) continue;
+      const query = String(call.params.query ?? '').trim();
+      if (!query || ctx.webDone.has(query)) continue;
+      return { name: 'web_search', params: { query } };
     }
     const attraction = String(call.params.attraction ?? '').trim();
     if (!attraction || ctx.docTitles.has(attraction) || ctx.ragDone.has(attraction)) continue;

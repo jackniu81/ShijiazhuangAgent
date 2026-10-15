@@ -123,12 +123,21 @@ const ATTRACTION_SIGNAL_RE =
 /** 追问指代:有历史对话且出现指代词,工具目标可能在上文(交给 LLM 结合 history 判断)。 */
 const FOLLOWUP_REF_RE = /它|这个|那个|这里|那里|这儿|那儿|该景点/;
 
+/** 网站查询语义:需要实时/最新信息(开放时间/票价/预约/政策变动等),本地语料难以覆盖。 */
+const WEB_QUERY_INTENT_RE =
+  /最新|实时|目前|近期|现在|官网|预约|订票|购票|通知|公告|变动|调整|临时|今天开|开放吗|开门吗/;
+
 /**
  * 廉价信号闸门(spec §10):判断问题(或结合历史的追问)是否可能需要工具。
  * 无信号的闲聊直接进入 generate,省掉一次 analyze LLM 往返。
  */
 function hasToolSignal(question: string, history?: { role: string }[]): boolean {
-  if (DATE_RE.test(question) || WEATHER_INTENT_RE.test(question) || ATTRACTION_SIGNAL_RE.test(question)) {
+  if (
+    DATE_RE.test(question) ||
+    WEATHER_INTENT_RE.test(question) ||
+    ATTRACTION_SIGNAL_RE.test(question) ||
+    WEB_QUERY_INTENT_RE.test(question)
+  ) {
     return true;
   }
   return (history?.length ?? 0) > 0 && FOLLOWUP_REF_RE.test(question);
@@ -139,7 +148,11 @@ function hasToolSignal(question: string, history?: { role: string }[]): boolean 
  * 仅产出候选,语义校验(日期范围/去重/资料覆盖)统一交给 selectAnalyzeToolCall,
  * 与 LLM 路径共用同一道 server 侧闸门。
  */
-function ruleAnalyzeCalls(question: string, weatherEnabled: boolean): ToolCall[] {
+function ruleAnalyzeCalls(
+  question: string,
+  weatherEnabled: boolean,
+  webSearchEnabled: boolean,
+): ToolCall[] {
   const calls: ToolCall[] = [];
   // spec §5.2:含日期且语义与天气/出行相关才调 weather
   if (weatherEnabled && WEATHER_INTENT_RE.test(question)) {
@@ -159,6 +172,11 @@ function ruleAnalyzeCalls(question: string, weatherEnabled: boolean): ToolCall[]
     if (question.includes(att)) {
       calls.push({ name: 'rag_attraction', params: { attraction: att } });
     }
+  }
+  // 规则路径的网站查询:命中实时信息语义即以问题原文作为检索词(是否选中交由 selectAnalyzeToolCall 定夺)
+  if (webSearchEnabled && WEB_QUERY_INTENT_RE.test(question)) {
+    const query = question.trim();
+    if (query) calls.push({ name: 'web_search', params: { query } });
   }
   return calls;
 }
@@ -222,17 +240,27 @@ export const nodes = {
           calls = [];
         }
       } else {
-        calls = ruleAnalyzeCalls(state.question ?? '', deps.config.chat.weatherEnabled);
+        calls = ruleAnalyzeCalls(
+          state.question ?? '',
+          deps.config.chat.weatherEnabled,
+          deps.config.chat.webSearchEnabled,
+        );
       }
 
       const selected = selectAnalyzeToolCall(calls, {
         weatherEnabled: deps.config.chat.weatherEnabled,
+        webSearchEnabled: deps.config.chat.webSearchEnabled,
         docTitles: new Set(state.docs.map((d) => d.meta.title)),
         weatherDone: (state.toolResults ?? []).some((r) => r.name === 'weather'),
         ragDone: new Set(
           (state.toolResults ?? [])
             .filter((r) => r.name === 'rag_attraction')
             .map((r) => String(r.params.attraction ?? '')),
+        ),
+        webDone: new Set(
+          (state.toolResults ?? [])
+            .filter((r) => r.name === 'web_search')
+            .map((r) => String(r.params.query ?? '')),
         ),
       });
       return { toolCalls: selected ? [selected] : [] };
@@ -311,6 +339,44 @@ export const nodes = {
         toolCalls: [],
         toolResults: [result],
         docs: mergedDocs,
+      };
+    };
+  },
+
+  /**
+   * 网站查询工具(chat-tools-spec web_search):
+   * 取本轮 web_search 调用,调 deps.webSearch 获取实时信息;未注入或抛错时降级。
+   * 产出 result 让轮次计数前进,避免死循环。
+   */
+  webTool(deps: GraphDeps) {
+    return async (state: ChatState) => {
+      guardCancel(deps);
+      const call = (state.toolCalls ?? []).find((c) => c.name === 'web_search');
+      if (!call) return { toolCalls: [], toolResults: [] };
+
+      const query = String(call.params.query ?? '').trim();
+      let output: string;
+      if (!query) {
+        output = '未提供有效的查询内容。';
+      } else {
+        try {
+          output = deps.webSearch
+            ? await deps.webSearch(query)
+            : `未找到关于「${query}」的联网信息。`;
+        } catch {
+          output = '网站查询服务暂不可用';
+        }
+      }
+
+      const result: ToolResult = {
+        name: 'web_search',
+        params: call.params,
+        output,
+      };
+
+      return {
+        toolCalls: [],
+        toolResults: [result],
       };
     };
   },
