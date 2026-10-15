@@ -17,6 +17,25 @@ describe('buildAppConfig 默认值与开关(issue #9 相关)', () => {
     expect(buildAppConfig({ RAG_MIN_SCORE: '0.35' }).rag.minScore).toBe(0.35);
   });
 
+  it('web_search 引擎(chat-tools-spec P5):默认 mock/topK 3/超时 8000,duckduckgo 可显式开启,非法回退 mock', () => {
+    const c = buildAppConfig({});
+    expect(c.web.provider).toBe('mock');
+    expect(c.web.topK).toBe(3);
+    expect(c.web.timeoutMs).toBe(8000);
+
+    const ddg = buildAppConfig({
+      WEB_SEARCH_PROVIDER: 'duckduckgo',
+      WEB_SEARCH_TOPK: '5',
+      WEB_SEARCH_TIMEOUT_MS: '3000',
+    });
+    expect(ddg.web.provider).toBe('duckduckgo');
+    expect(ddg.web.topK).toBe(5);
+    expect(ddg.web.timeoutMs).toBe(3000);
+
+    // 非法引擎取值回退 mock
+    expect(buildAppConfig({ WEB_SEARCH_PROVIDER: 'google' }).web.provider).toBe('mock');
+  });
+
   it('embed 批量条数(issue #93):默认 64,非法/非正值回退默认', () => {
     expect(buildAppConfig({}).llm.ollama.embedBatchSize).toBe(64);
     expect(buildAppConfig({ OLLAMA_EMBED_BATCH_SIZE: '16' }).llm.ollama.embedBatchSize).toBe(16);

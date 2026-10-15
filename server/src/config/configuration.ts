@@ -8,6 +8,9 @@ export type LlmProviderName = 'mock' | 'siliconflow' | 'ollama';
 /** RAG 向量存储后端(issue #29):内存 or pgvector 持久化。 */
 export type RagBackend = 'memory' | 'pgvector';
 
+/** web_search 工具数据源引擎(chat-tools-spec P5):mock(默认) | duckduckgo(免 Key 真实联网)。 */
+export type WebSearchProvider = 'mock' | 'duckduckgo';
+
 /** 集中式、带默认值与类型转换的应用配置。 */
 export interface AppConfig {
   llm: {
@@ -85,6 +88,15 @@ export interface AppConfig {
     /** WS_TOKEN 环境变量;空 = 不鉴权(开发默认),生产必须设置 */
     token: string;
   };
+  /** web_search 工具数据源引擎配置(与 chat.webSearchEnabled 开关联动) */
+  web: {
+    /** 数据源引擎:mock(默认,无外部依赖) | duckduckgo(免 Key 真实联网) */
+    provider: WebSearchProvider;
+    /** 在线结果最多条数 */
+    topK: number;
+    /** 单次 web 请求超时(毫秒),超时/失败降级为"未找到"文案 */
+    timeoutMs: number;
+  };
 }
 
 const bool = (v: string | undefined, def: boolean): boolean =>
@@ -105,6 +117,10 @@ const provider = (v: string | undefined): LlmProviderName =>
   v === 'siliconflow' || v === 'ollama' ? v : 'mock';
 
 const ragBackend = (v: string | undefined): RagBackend => (v === 'pgvector' ? 'pgvector' : 'memory');
+
+/** web_search 数据源引擎:仅 duckduckgo 为真实联网,其余一律回退 mock。 */
+const webProvider = (v: string | undefined): WebSearchProvider =>
+  v === 'duckduckgo' ? 'duckduckgo' : 'mock';
 
 export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig {
   return {
@@ -163,6 +179,11 @@ export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig 
     },
     wsAuth: {
       token: env.WS_TOKEN ?? '',
+    },
+    web: {
+      provider: webProvider(env.WEB_SEARCH_PROVIDER),
+      topK: int(env.WEB_SEARCH_TOPK, 3),
+      timeoutMs: int(env.WEB_SEARCH_TIMEOUT_MS, 8000),
     },
   };
 }

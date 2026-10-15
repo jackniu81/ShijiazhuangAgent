@@ -70,6 +70,7 @@ function makeConfig(over: Partial<AppConfig['llm']> & Partial<AppConfig['chat']>
     plan: { temperature: 0.2, maxTokens: 4096 },
     rateLimit: { maxConcurrentPerSession: 1, perWindow: 30, windowMs: 60_000 },
     wsAuth: { token: '' },
+    web: { provider: 'mock', topK: 3, timeoutMs: 8000 },
   };
 }
 
