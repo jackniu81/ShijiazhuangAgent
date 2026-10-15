@@ -48,6 +48,10 @@ type LastRequest =
   | { kind: 'plan'; requestId: string; input: PlanCreatePayload['input'] }
   | null;
 
+// ---------- 快速提问 ----------
+// 空会话时展示的预置问题,点击后直接发送给 agent
+const QUICK_QUESTIONS = ['古城1日游推荐', '石家庄+古城2日游行程'];
+
 // ---------- Component ----------
 // 状态机(ChatState/ChatAction/reducer)已抽至 chat.reducer.ts(issue #49),行为零变更
 
@@ -144,20 +148,26 @@ export default function ChatWindow() {
 
   const canSubmit = () => state.isConnected && !state.isStreaming;
 
+  const sendQuestion = (text: string) => {
+    if (!canSubmit()) return;
+
+    const requestId = makeId();
+    lastRequestRef.current = { kind: 'chat', requestId, sessionId, question: text };
+    dispatch({ type: 'SEND_CHAT', requestId, question: text });
+    startTimeout();
+
+    const payload: ChatAskPayload = { requestId, sessionId, question: text };
+    agentSocket.ask(payload);
+  };
+
   const handleSendChat = () => {
     if (!canSubmit()) return;
     const el = textareaRef.current;
     const text = el?.value?.trim() ?? '';
     if (!text) return;
 
-    const requestId = makeId();
-    lastRequestRef.current = { kind: 'chat', requestId, sessionId, question: text };
-    dispatch({ type: 'SEND_CHAT', requestId, question: text });
+    sendQuestion(text);
     el!.value = '';
-    startTimeout();
-
-    const payload: ChatAskPayload = { requestId, sessionId, question: text };
-    agentSocket.ask(payload);
   };
 
   const handlePlanSubmit = (input: PlanCreatePayload['input']) => {
@@ -260,6 +270,25 @@ export default function ChatWindow() {
 
   const footer = (
     <div className="flex flex-col gap-2 pt-1">
+      {state.messages.length === 0 && (
+        <div className="flex flex-col items-start gap-1.5" data-testid="quick-questions">
+          <span className="text-xs text-slate-400">你可以这样问我:</span>
+          {QUICK_QUESTIONS.map((q) => (
+            <button
+              key={q}
+              type="button"
+              onClick={() => sendQuestion(q)}
+              disabled={!canSubmit()}
+              className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
+              data-testid={`quick-question-${q}`}
+            >
+              <span aria-hidden>🤖</span>
+              {q}
+            </button>
+          ))}
+        </div>
+      )}
+
       {toast}
 
       {state.showPlanningForm && (
