@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 
 // 用可控制的 socket 桩模拟连接状态,避免测试发起真实 WebSocket
 const { socketMock, listeners } = vi.hoisted(() => {
@@ -19,7 +19,10 @@ import ConnectionStatus from '../components/ConnectionStatus';
 
 function setConnected(c: boolean, err = '') {
   socketMock.connected = c;
-  listeners.forEach((cb) => cb(c, err));
+  // socket 事件来自 React 之外,需用 act 包裹以同步 flush 状态更新
+  act(() => {
+    listeners.forEach((cb) => cb(c, err));
+  });
 }
 
 describe('ConnectionStatus', () => {
