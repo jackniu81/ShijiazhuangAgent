@@ -55,6 +55,14 @@ export interface AppConfig {
     temperature: number;
     /** 单次回答的生成 token 上限(issue #86),防成本失控 */
     maxTokens: number;
+    /** 工具循环调度最大轮次上限(chat-tools-spec §7.2) */
+    maxToolRounds: number;
+    /** 天气工具开关 */
+    weatherEnabled: boolean;
+    /** rag_attraction 工具检索 topK */
+    ragToolTopK: number;
+    /** analyze 节点 LLM 化灰度开关(chat-tools-spec P4):关=规则短路,开=LLM JSON 判断 */
+    analyzeLlmEnabled: boolean;
   };
   /** 行程生成参数(issue #86):plan 输出为结构化 JSON,需低温采样保稳定 */
   plan: {
@@ -135,6 +143,10 @@ export function buildAppConfig(env: NodeJS.ProcessEnv = process.env): AppConfig 
       questionMaxLen: int(env.CHAT_QUESTION_MAX, 500),
       temperature: num(env.CHAT_TEMPERATURE, 0.7),
       maxTokens: num(env.CHAT_MAX_TOKENS, 2048),
+      maxToolRounds: int(env.CHAT_MAX_TOOL_ROUNDS, 3),
+      weatherEnabled: bool(env.CHAT_WEATHER_ENABLED, false),
+      ragToolTopK: int(env.CHAT_RAG_TOOL_TOPK, 3),
+      analyzeLlmEnabled: bool(env.CHAT_ANALYZE_LLM_ENABLED, false),
     },
     plan: {
       // 行程 JSON 需要强确定性,低温采样(issue #86,建议 ≤ 0.3)

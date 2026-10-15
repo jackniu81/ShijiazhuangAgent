@@ -1,7 +1,7 @@
 import { Annotation, END, START, StateGraph } from '@langchain/langgraph';
 import type { Msg } from '../llm/llm.types';
 import type { RetrievedDoc } from '../rag/rag.types';
-import { ChatState, GraphDeps } from './graph.types';
+import { ChatState, GraphDeps, ToolCall, ToolResult } from './graph.types';
 import { nodes } from './nodes';
 
 /** 问答图状态通道。 */
@@ -31,15 +31,41 @@ const ChatAnnotation = Annotation.Root({
     reducer: (_prev, next) => next,
     default: () => false,
   }),
+  toolCalls: Annotation<ToolCall[]>({
+    reducer: (_prev, next) => next ?? [],
+    default: () => [],
+  }),
+  toolResults: Annotation<ToolResult[]>({
+    reducer: (prev, next) => [...(prev ?? []), ...(next ?? [])],
+    default: () => [],
+  }),
 });
 
-/** retrieve → generate → END */
+function routeTools(state: ChatState): 'weather' | 'rag' | 'none' {
+  const call = state.toolCalls?.[0];
+  if (!call) return 'none';
+  return call.name === 'weather' ? 'weather'
+       : call.name === 'rag_attraction' ? 'rag'
+       : 'none';
+}
+
+/** retrieve → analyze → [weather_tool | rag_tool → analyze]* → generate → END */
 function buildChatGraph(deps: GraphDeps) {
   return new StateGraph(ChatAnnotation)
-    .addNode('retrieve', nodes.retrieve(deps, { emitProgress: false }) as never)
-    .addNode('generate', nodes.generate(deps) as never)
+    .addNode('retrieve',     nodes.retrieve(deps, { emitProgress: false }) as never)
+    .addNode('analyze',      nodes.analyze(deps) as never)
+    .addNode('weather_tool', nodes.weatherTool(deps) as never)
+    .addNode('rag_tool',     nodes.ragTool(deps) as never)
+    .addNode('generate',     nodes.generate(deps) as never)
     .addEdge(START, 'retrieve')
-    .addEdge('retrieve', 'generate')
+    .addEdge('retrieve', 'analyze')
+    .addConditionalEdges('analyze', routeTools, {
+      weather: 'weather_tool',
+      rag:     'rag_tool',
+      none:    'generate',
+    })
+    .addEdge('weather_tool', 'analyze')
+    .addEdge('rag_tool',     'analyze')
     .addEdge('generate', END)
     .compile();
 }

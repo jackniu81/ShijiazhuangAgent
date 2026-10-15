@@ -17,14 +17,19 @@ export interface ChatPromptInput {
   question: string;
   history: Msg[];
   docs: RetrievedDoc[];
+  toolResults?: Array<{ name: string; output: string }>;
 }
 
 /** 参考资料块:标题 + 正文,预算内按 doc 逐条装入、单条按句子边界截(issue #91)。 */
-export function formatChatContext(docs: RetrievedDoc[], question: string): string {
+export function formatChatContext(docs: RetrievedDoc[], question: string, toolResults?: Array<{ name: string; output: string }>): string {
   const contextTitles = uniqueTitles(docs).slice(0, 4);
   const blocks = docs.map((d) => `## ${d.meta.title}\n${d.text}`);
+  const extraContext = toolResults && toolResults.length > 0
+    ? '\n工具查询结果:\n' + toolResults.map((t) => `[${t.name}] ${t.output}`).join('\n') + '\n'
+    : '';
   return (
     `CONTEXT:${contextTitles.join('、')}\n` +
+    extraContext +
     `参考资料:\n${fitDocsToBudget(blocks, CHAT_DOCS_BUDGET)}\n` +
     `当前问题:${question}`
   );
@@ -35,6 +40,6 @@ export function buildChatMessages(input: ChatPromptInput, historyTurns: number):
   return [
     { role: 'system', content: CHAT_SYSTEM_PROMPT },
     ...history,
-    { role: 'user', content: formatChatContext(input.docs, input.question) },
+    { role: 'user', content: formatChatContext(input.docs, input.question, input.toolResults) },
   ];
 }

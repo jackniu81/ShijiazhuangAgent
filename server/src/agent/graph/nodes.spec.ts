@@ -14,6 +14,7 @@ import { LLMProvider } from '../llm/llm.types';
 import { RetrievedDoc } from '../rag/rag.types';
 import { AppConfig } from '../../config/configuration';
 import { nodes, rewriteRetrieveQuery } from './nodes';
+import { localDateStr } from './analyze.schema';
 import { CancelledSignal, ChatState, GraphDeps, PlanState } from './graph.types';
 
 /** 构造一个可控制 signal/取消 的最小问答节点依赖。 */
@@ -61,6 +62,8 @@ const state: ChatState = {
   sessionId: 's1',
   history: [],
   docs: [],
+  toolCalls: [],
+  toolResults: [],
 };
 
 describe('nodes.generate 取消/超时收尾', () => {
@@ -329,7 +332,7 @@ function makeRetrieveDeps(): any {
 }
 
 const chatState = (question: string, history: ChatState['history']): PlanState & ChatState =>
-  ({ question, sessionId: 's1', history, docs: [], input: { days: 1 } } as PlanState & ChatState);
+  ({ question, sessionId: 's1', history, docs: [], toolCalls: [], toolResults: [], input: { days: 1 } } as unknown as PlanState & ChatState);
 
 describe('nodes.retrieve 追问 query 改写 (#88)', () => {
   it('无 history → 保持原拼接:question + 固定词', async () => {
@@ -424,7 +427,9 @@ describe('nodes.generate 无资料注记 (issue #89)', () => {
     sessionId: 's1',
     history: [],
     docs: [],
-  } as ChatState;
+    toolCalls: [],
+    toolResults: [],
+  } as unknown as ChatState;
 
   it('全过滤 → answer 注明"未检索到本地资料"', async () => {
     const d = makeDeps({ isCancelled: () => false, signal: new AbortController().signal }) as any;
@@ -489,5 +494,179 @@ describe('生成参数透传 (issue #86)', () => {
     expect(chatOpts).toHaveLength(2);
     expect(chatOpts[0]).toEqual({ temperature: 0.2, maxTokens: 4096, jsonMode: true });
     expect(chatOpts[1]).toEqual(chatOpts[0]);
+  });
+});
+
+// ────────────────────────────────────────────────────────────
+// nodes.analyze 工具调度(chat-tools-spec P4):规则短路 / LLM JSON / server 闸门 / 降级
+// ────────────────────────────────────────────────────────────
+
+/** analyze 专用 deps:可控 provider 名、chat 输出与工具开关,并记录每次 chat 入参。 */
+function makeAnalyzeDeps(opts: {
+  llmName?: string;
+  chatImpl?: (msgs: unknown, o?: unknown) => Promise<string> | string;
+  chatThrows?: Error;
+  weatherEnabled?: boolean;
+  analyzeLlmEnabled?: boolean;
+}): any {
+  const d = makeDeps({ isCancelled: () => false, signal: new AbortController().signal }) as any;
+  const chatCalls: Array<{ msgs: unknown; opts: unknown }> = [];
+  d.llm = {
+    name: opts.llmName ?? 'siliconflow',
+    chat: async (msgs: unknown, o?: unknown) => {
+      chatCalls.push({ msgs, opts: o });
+      if (opts.chatThrows) throw opts.chatThrows;
+      return opts.chatImpl ? opts.chatImpl(msgs, o) : '';
+    },
+    stream: async () => '',
+    embed: async (t: unknown[]) => t,
+  };
+  d.config.chat = {
+    ...d.config.chat,
+    maxToolRounds: 3,
+    weatherEnabled: opts.weatherEnabled ?? false,
+    ragToolTopK: 3,
+    analyzeLlmEnabled: opts.analyzeLlmEnabled ?? false,
+  };
+  d.chatCalls = chatCalls;
+  return d;
+}
+
+const tomorrow = () => localDateStr(new Date(Date.now() + 86400000));
+
+describe('nodes.analyze 规则短路(mock provider / 灰度关闭)', () => {
+  it('mock provider 即使开关打开也走规则:含"明天"+天气开关 → weather,日期换算为本地明天', async () => {
+    const d = makeAnalyzeDeps({
+      llmName: 'mock',
+      analyzeLlmEnabled: true,
+      weatherEnabled: true,
+    });
+    const res = await nodes.analyze(d)(chatState('明天石家庄天气怎么样', []));
+    expect(res.toolCalls).toEqual([{ name: 'weather', params: { date: tomorrow() } }]);
+    // 规则路径不产生 LLM 调用
+    expect(d.chatCalls).toHaveLength(0);
+  });
+
+  it('问题含白名单景点且未被 docs 覆盖 → rag_attraction', async () => {
+    const d = makeAnalyzeDeps({ llmName: 'mock' });
+    const res = await nodes.analyze(d)(chatState('赵云庙值得去吗', []));
+    expect(res.toolCalls).toEqual([
+      { name: 'rag_attraction', params: { attraction: '赵云庙' } },
+    ]);
+  });
+
+  it('景点已在 baseline docs 中 → 不调用工具', async () => {
+    const d = makeAnalyzeDeps({ llmName: 'mock' });
+    const res = await nodes.analyze(d)({ ...chatState('赵云庙值得去吗', []), docs: [retrieved('赵云庙')] });
+    expect(res.toolCalls).toEqual([]);
+  });
+
+  it('天气开关关闭时含日期也不调度 weather;普通问题 → []', async () => {
+    const d = makeAnalyzeDeps({ llmName: 'mock', weatherEnabled: false });
+    expect((await nodes.analyze(d)(chatState('明天天气怎么样', []))).toolCalls).toEqual([]);
+    expect((await nodes.analyze(d)(chatState('石家庄有什么好玩的', []))).toolCalls).toEqual([]);
+  });
+});
+
+describe('nodes.analyze LLM 化路径 (P4)', () => {
+  it('真实 provider + 开关开 → 调一次 chat(temperature:0 + jsonMode),按 JSON 调度表外景点 rag', async () => {
+    const d = makeAnalyzeDeps({
+      analyzeLlmEnabled: true,
+      chatImpl: () =>
+        JSON.stringify({ toolCalls: [{ name: 'rag_attraction', params: { attraction: '柏林禅寺' } }] }),
+    });
+    const res = await nodes.analyze(d)(chatState('柏林禅寺门票多少', []));
+    expect(d.chatCalls).toHaveLength(1);
+    expect(d.chatCalls[0].opts).toMatchObject({ temperature: 0, jsonMode: true });
+    expect(res.toolCalls).toEqual([
+      { name: 'rag_attraction', params: { attraction: '柏林禅寺' } },
+    ]);
+  });
+
+  it('LLM 返回 ```json 代码块包裹的 weather 调用 + 开关开 → 解析并选中', async () => {
+    const d = makeAnalyzeDeps({
+      analyzeLlmEnabled: true,
+      weatherEnabled: true,
+      chatImpl: () =>
+        `好的\n\`\`\`json\n${JSON.stringify({ toolCalls: [{ name: 'weather', params: { date: tomorrow() } }] })}\n\`\`\``,
+    });
+    const res = await nodes.analyze(d)(chatState('明天需要带伞吗', []));
+    expect(res.toolCalls).toEqual([{ name: 'weather', params: { date: tomorrow() } }]);
+  });
+
+  it('server 闸门:天气开关关闭时 LLM 要求 weather → 不调度', async () => {
+    const d = makeAnalyzeDeps({
+      analyzeLlmEnabled: true,
+      weatherEnabled: false,
+      chatImpl: () => JSON.stringify({ toolCalls: [{ name: 'weather', params: { date: tomorrow() } }] }),
+    });
+    const res = await nodes.analyze(d)(chatState('明天天气', []));
+    expect(res.toolCalls).toEqual([]);
+  });
+
+  it('LLM 输出不可解析 → 降级为不调用工具,不抛错', async () => {
+    const d = makeAnalyzeDeps({ analyzeLlmEnabled: true, chatImpl: () => '我认为不需要工具' });
+    const res = await nodes.analyze(d)(chatState('随便聊聊', []));
+    expect(res.toolCalls).toEqual([]);
+  });
+
+  it('LLM 调用抛错 → 降级 [] 并写 warn,不阻断问答', async () => {
+    warns.splice(0, warns.length);
+    const d = makeAnalyzeDeps({ analyzeLlmEnabled: true, chatThrows: new Error('boom') });
+    const res = await nodes.analyze(d)(chatState('明天天气', []));
+    expect(res.toolCalls).toEqual([]);
+    expect(warns.join('\n')).toContain('analyze LLM 调用失败');
+  });
+
+  it('toolResults 达 MAX_TOOL_ROUNDS → 强制 [],且不再调用 LLM', async () => {
+    const d = makeAnalyzeDeps({ analyzeLlmEnabled: true });
+    const s: ChatState = {
+      ...chatState('还想问天气', []),
+      toolResults: [
+        { name: 'weather', params: { date: '2026-10-13' }, output: '晴' },
+        { name: 'rag_attraction', params: { attraction: '赵云庙' }, output: '资料' },
+        { name: 'rag_attraction', params: { attraction: '隆兴寺' }, output: '资料' },
+      ],
+    };
+    const res = await nodes.analyze(d)(s);
+    expect(res.toolCalls).toEqual([]);
+    expect(d.chatCalls).toHaveLength(0);
+  });
+});
+
+describe('nodes.weatherTool 防御性校验与降级 (spec §5.3)', () => {
+  const weatherState = (date: string): ChatState =>
+    ({ ...chatState('', []), toolCalls: [{ name: 'weather', params: { date } }] }) as ChatState;
+
+  it('日期超过 5 天 → output"暂不支持",且不调用 deps.weather', async () => {
+    const d = makeDeps({ isCancelled: () => false, signal: new AbortController().signal }) as any;
+    let called = false;
+    d.weather = async () => {
+      called = true;
+      return '晴';
+    };
+    const far = localDateStr(new Date(Date.now() + 10 * 86400000));
+    const res = await nodes.weatherTool(d)(weatherState(far));
+    expect(called).toBe(false);
+    expect(res.toolCalls).toEqual([]);
+    expect(res.toolResults[0].output).toBe('暂不支持该日期天气查询');
+  });
+
+  it('合法日期 → 透传 deps.weather 结果并清空 toolCalls', async () => {
+    const d = makeDeps({ isCancelled: () => false, signal: new AbortController().signal }) as any;
+    d.weather = async (date: string, city: string) => `${city} ${date} 晴 20℃`;
+    const date = tomorrow();
+    const res = await nodes.weatherTool(d)(weatherState(date));
+    expect(res.toolCalls).toEqual([]);
+    expect(res.toolResults[0].output).toBe(`石家庄 ${date} 晴 20℃`);
+  });
+
+  it('deps.weather 抛错 → 降级为"服务暂不可用",节点不抛', async () => {
+    const d = makeDeps({ isCancelled: () => false, signal: new AbortController().signal }) as any;
+    d.weather = async () => {
+      throw new Error('network down');
+    };
+    const res = await nodes.weatherTool(d)(weatherState(tomorrow()));
+    expect(res.toolResults[0].output).toBe('天气查询服务暂不可用');
   });
 });

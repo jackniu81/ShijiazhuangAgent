@@ -10,6 +10,8 @@ export interface GraphDeps {
   llm: LLMProvider;
   /** 已绑定数据源的检索函数 */
   retrieve: (query: string, k?: number) => Promise<RetrievedDoc[]>;
+  /** 天气查询函数,由 AgentService 注入;缺省时 weather 工具返回"不可用" */
+  weather?: (date: string, city?: string) => Promise<string>;
   config: AppConfig;
   emit: Emit;
   requestId: string;
@@ -27,15 +29,28 @@ export interface PlanState {
   plan?: TravelPlan;
 }
 
+export interface ToolCall {
+  name: 'weather' | 'rag_attraction';
+  params: Record<string, unknown>;
+}
+
+export interface ToolResult {
+  name: ToolCall['name'];
+  params: Record<string, unknown>;
+  output: string;
+  docs?: RetrievedDoc[];
+}
+
 /** 问答图状态值。 */
 export interface ChatState {
   question: string;
   sessionId: string;
   history: Msg[];
-  docs: RetrievedDoc[];
+  docs: RetrievedDoc[];          // baseline retrieve 结果(不变)
   answer?: string;
-  /** 阈值过滤(issue #89)生效且候选全部被过滤时为 true,回答注明未检索到本地资料 */
-  filteredEmpty?: boolean;
+  filteredEmpty?: boolean;       // 现有阈值全过滤标记(不变)
+  toolCalls: ToolCall[];         // analyze 产出的本轮待执行工具
+  toolResults: ToolResult[];     // 各工具累计执行结果
 }
 
 /** 节点边界检测到取消时抛出,用于中断 LangGraph 执行。 */
