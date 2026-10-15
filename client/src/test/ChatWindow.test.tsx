@@ -138,3 +138,29 @@ describe('ChatWindow', () => {
     expect(within(container as HTMLElement).getByText('石家庄旅游助手')).toBeInTheDocument();
   });
 });
+
+describe('ChatWindow — 快速提问', () => {
+  it('空会话展示 2 个预置问题,未连接时禁用', () => {
+    render(<ChatWindow />);
+    expect(screen.getByTestId('quick-questions')).toBeInTheDocument();
+    expect(screen.getByTestId('quick-question-古城1日游推荐')).toBeDisabled();
+    expect(screen.getByTestId('quick-question-石家庄+古城2日游行程')).toBeDisabled();
+  });
+
+  it('连接后点击快速提问,直接以该问题调用 ask 并进入流式', () => {
+    render(<ChatWindow />);
+    connect();
+    fireEvent.click(screen.getByTestId('quick-question-古城1日游推荐'));
+    expect(agentSocket.ask).toHaveBeenCalledWith(
+      expect.objectContaining({ question: '古城1日游推荐' }),
+    );
+    expect(screen.getByTestId('stop-btn')).toBeInTheDocument();
+  });
+
+  it('发送后消息区非空,快速提问区消失', () => {
+    render(<ChatWindow />);
+    connect();
+    fireEvent.click(screen.getByTestId('quick-question-石家庄+古城2日游行程'));
+    expect(screen.queryByTestId('quick-questions')).not.toBeInTheDocument();
+  });
+});
