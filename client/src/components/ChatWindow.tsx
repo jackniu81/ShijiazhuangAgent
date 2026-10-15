@@ -20,6 +20,7 @@ import {
 import Layout from './Layout';
 import MessageList from './MessageList';
 import PlanningForm from './PlanningForm';
+import QuickQuestions from './QuickQuestions';
 
 // ---------- Session 持久化 ----------
 const SESSION_KEY = 'shijiazhuang-agent-session-id';
@@ -271,22 +272,7 @@ export default function ChatWindow() {
   const footer = (
     <div className="flex flex-col gap-2 pt-1">
       {state.messages.length === 0 && (
-        <div className="flex flex-col items-start gap-1.5" data-testid="quick-questions">
-          <span className="text-xs text-slate-400">你可以这样问我:</span>
-          {QUICK_QUESTIONS.map((q) => (
-            <button
-              key={q}
-              type="button"
-              onClick={() => sendQuestion(q)}
-              disabled={!canSubmit()}
-              className="flex items-center gap-2 rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50"
-              data-testid={`quick-question-${q}`}
-            >
-              <span aria-hidden>🤖</span>
-              {q}
-            </button>
-          ))}
-        </div>
+        <QuickQuestions questions={QUICK_QUESTIONS} disabled={!canSubmit()} onSelect={sendQuestion} />
       )}
 
       {toast}
